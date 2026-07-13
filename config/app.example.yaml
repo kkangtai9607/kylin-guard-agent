@@ -1,0 +1,56 @@
+app:
+  name: KylinGuard Agent
+  mode: READ_ONLY
+  host: 127.0.0.1
+  port: 8000
+  log_level: INFO
+  request_id_header: X-Request-ID
+  controlled_execution:
+    allowed_cleanup_roots:
+      - /var/log/kylin-guard-managed
+    protected_paths:
+      - /etc
+      - /root
+      - /boot
+      - /proc
+    backup_root: /var/lib/kylin-guard/backups
+    minimum_age_days: 7
+    minimum_size_bytes: 10000000
+    allowed_services: [nginx]
+    systemctl_path: /usr/bin/systemctl
+    # 仅在安装、校验并显式启用固定动作执行代理后使用；默认 READ_ONLY 不连接该 Socket。
+    executor_socket_path: /run/kylin-guard/executor.sock
+    managed_configs:
+      - target_id: nginx-main
+        path: /etc/nginx/nginx.conf
+        validator: nginx
+        validator_path: /usr/sbin/nginx
+    managed_processes:
+      - process_name: nginx
+        service: nginx
+
+database:
+  url_env: DATABASE_URL
+  sqlite_wal: true
+  foreign_keys: true
+  busy_timeout_ms: 5000
+
+limits:
+  task_concurrency: 4
+  tool_concurrency: 4
+  request_body_bytes: 1048576
+  tool_output_bytes: 65536
+  default_timeout_seconds: 30
+  sse_replay_events: 500
+
+llm:
+  provider: deepseek
+  model_env: DEEPSEEK_MODEL
+  base_url_env: DEEPSEEK_BASE_URL
+  api_key_env: DEEPSEEK_API_KEY
+  timeout_seconds: 20
+  max_retries: 1
+  require_structured_output: true
+
+secrets:
+  approval_hmac_key_env: APPROVAL_HMAC_KEY

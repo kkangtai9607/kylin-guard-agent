@@ -1,0 +1,54 @@
+/* 高对比按钮主题：按钮文字不再继承面板的次要文本颜色。 */
+.el-button {
+  --el-button-bg-color: #ffffff;
+  --el-button-border-color: #94a3b8;
+  --el-button-text-color: #1e3a5f;
+  --el-button-hover-bg-color: #e8f0fb;
+  --el-button-hover-border-color: #2563eb;
+  --el-button-hover-text-color: #123d72;
+  min-height: 34px;
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+.el-button span { color: inherit !important; }
+.el-button--primary {
+  --el-button-bg-color: #1d4ed8;
+  --el-button-border-color: #1d4ed8;
+  --el-button-text-color: #ffffff;
+  --el-button-hover-bg-color: #1e40af;
+  --el-button-hover-border-color: #1e40af;
+  --el-button-hover-text-color: #ffffff;
+}
+.el-button--success {
+  --el-button-bg-color: #087f5b;
+  --el-button-border-color: #087f5b;
+  --el-button-text-color: #ffffff;
+  --el-button-hover-bg-color: #06694b;
+  --el-button-hover-border-color: #06694b;
+  --el-button-hover-text-color: #ffffff;
+}
+.el-button--danger {
+  --el-button-bg-color: #c92a2a;
+  --el-button-border-color: #c92a2a;
+  --el-button-text-color: #ffffff;
+  --el-button-hover-bg-color: #a61e1e;
+  --el-button-hover-border-color: #a61e1e;
+  --el-button-hover-text-color: #ffffff;
+}
+.el-button.is-text {
+  --el-button-text-color: #1d4ed8;
+  --el-button-hover-bg-color: #dbeafe;
+  --el-button-hover-text-color: #1e3a8a;
+}
+.el-button.is-disabled,
+.el-button.is-disabled:hover {
+  --el-button-bg-color: #e5e7eb;
+  --el-button-border-color: #cbd5e1;
+  --el-button-text-color: #64748b;
+  opacity: 1;
+}
+.el-button:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+.task-primary,
+.task-primary:hover {
+  color: #ffffff !important;
+}

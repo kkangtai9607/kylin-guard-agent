@@ -1,0 +1,52 @@
+policy:
+  default_mode: READ_ONLY
+  fail_closed: true
+  model_can_lower_risk: false
+  model_can_authorize_execution: false
+
+risk:
+  L0: knowledge_only
+  L1: basic_read_only
+  L2: constrained_diagnosis
+  L3: controlled_state_change
+  L4: permanently_forbidden
+
+approval:
+  required_levels: [L3]
+  forbidden_levels: [L4]
+  token_ttl_seconds: 300
+  single_use: true
+  bind_fields: [user_id, task_id, tool_name, normalized_args_hash, expires_at]
+  self_approval_allowed: false
+
+paths:
+  allowed_roots:
+    - /var/log/kylin-guard-demo
+    - /etc/nginx
+  protected_paths:
+    - /etc/shadow
+    - /etc/gshadow
+    - /root/.ssh
+    - /home/*/.ssh
+    - /proc/1
+
+services:
+  allowed: [nginx]
+  protected: [sshd, systemd, dbus]
+
+execution:
+  fixed_argv_only: true
+  arbitrary_command_strings: false
+  dry_run_required: true
+  backup_required: true
+  verification_required: true
+  rollback_on_verification_failure: true
+  timeout_seconds: 30
+  max_output_bytes: 65536
+
+untrusted_data:
+  label: UNTRUSTED_DATA
+  strip_control_characters: true
+  redact_sensitive_fields: true
+  max_text_bytes: 32768
+

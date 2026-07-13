@@ -1,0 +1,41 @@
+registry:
+  reject_unknown_tools: true
+  reject_invalid_metadata: true
+  executable_policy: fixed_argv
+
+tools:
+  capability_probe:
+    enabled: true
+    risk_level: L1
+    read_only: true
+    allowed_modes: [DEMO, READ_ONLY, CONTROLLED_EXECUTION]
+    timeout_seconds: 10
+    max_output_bytes: 32768
+    max_concurrency: 2
+    platform_capabilities: [procfs]
+
+  service_status:
+    enabled: true
+    risk_level: L1
+    read_only: true
+    allowed_modes: [DEMO, READ_ONLY, CONTROLLED_EXECUTION]
+    allowed_executables: [/usr/bin/systemctl]
+    timeout_seconds: 10
+    max_output_bytes: 65536
+    max_concurrency: 4
+    platform_capabilities: [systemd]
+
+  safe_log_cleanup:
+    enabled: true
+    risk_level: L3
+    read_only: false
+    allowed_modes: [DEMO, CONTROLLED_EXECUTION]
+    allowed_executables: []
+    supports_dry_run: true
+    requires_approval: true
+    backup_strategy: manifest_and_archive
+    verification_strategy: disk_usage_and_target_absence
+    rollback_strategy: restore_archive
+    timeout_seconds: 30
+    max_output_bytes: 65536
+    max_concurrency: 1

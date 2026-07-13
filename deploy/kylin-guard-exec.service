@@ -1,0 +1,23 @@
+[Unit]
+Description=KylinGuard fixed-action privileged execution broker
+After=network.target
+
+[Service]
+Type=simple
+User=kylin-guard-exec
+Group=kylin-guard
+WorkingDirectory=/opt/kylin-guard
+ExecStart=/opt/kylin-guard/.venv/bin/python -m backend.app.executor.broker --socket /run/kylin-guard/executor.sock --database-path /opt/kylin-guard/data/kylin_guard.db --allowed-client-user kylin-guard
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/kylin-guard /opt/kylin-guard/data
+RuntimeDirectory=kylin-guard
+RuntimeDirectoryMode=0750
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

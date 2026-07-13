@@ -1,0 +1,2 @@
+# Fixed helper and fixed arguments only; no shell, interpreter wildcard, or arbitrary arguments.
+kylin-guard-exec ALL=(root) NOPASSWD: /usr/local/lib/kylin-guard/kylin_guard_privileged.py service_restart nginx, /usr/local/lib/kylin-guard/kylin_guard_privileged.py service_rollback nginx

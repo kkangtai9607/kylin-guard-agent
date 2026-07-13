@@ -1,0 +1,26 @@
+[Unit]
+Description=KylinGuard Agent API
+After=network.target
+
+[Service]
+Type=simple
+User=kylin-guard
+Group=kylin-guard
+WorkingDirectory=/opt/kylin-guard
+Environment=KYLIN_GUARD_MODE=READ_ONLY
+Environment=KYLIN_GUARD_DATABASE_URL=sqlite:////opt/kylin-guard/data/kylin_guard.db
+EnvironmentFile=-/etc/kylin-guard/secrets.env
+ExecStartPre=/opt/kylin-guard/.venv/bin/alembic upgrade head
+ExecStart=/opt/kylin-guard/.venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/kylin-guard/data
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
