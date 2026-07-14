@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 LoongArch maturin 构建后端约束
+
+- 官方麒麟 LoongArch VM 新错误为构建 `maturin` 自身时触发 Cargo `edition2024`，来源是 pip 构建隔离环境为 `pydantic-core`/`rpds-py` 等源码包临时拉取了过新的 build backend。
+- 新增 `deploy/build-constraints.txt`，固定 `maturin==1.8.7`；`deploy/install.sh` 通过 `PIP_CONSTRAINT` 将该约束传递给 pip 的构建隔离环境，同时继续使用 `--no-deps --require-hashes` 安装运行时锁定依赖。
+- 本地验证：`pytest -q` 110 项通过；`ruff check backend mcp_server scripts`、`mypy backend mcp_server`、`security_scan.py`、`validate_phase0.py` 均通过；干净 Python 3.11 部署依赖安装冒烟可导入 `FastMCP`、后端 app 并列出 14 个 Tool。
+- 该修复仅约束构建工具链，不改变运行模式、安全护栏、审批、审计或 MCP Tool 注册逻辑；LoongArch 真机安装仍需以官方 VM 最新结果为准。
+
 ## 2026-07-14 LoongArch 部署专用依赖剥离 crypto
 
 - 官方麒麟 LoongArch VM 仍在 `archery 1.2.2` 处失败，确认单纯降级 `cryptography` 不足以规避 MCP SDK `pyjwt[crypto]` 的源码构建链。

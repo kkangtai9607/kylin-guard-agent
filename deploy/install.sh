@@ -34,7 +34,8 @@ install -d -m 0755 "$APP_ROOT/frontend"
 cp -a "$SOURCE_ROOT/frontend/dist/." "$APP_ROOT/frontend/"
 
 python3 -m venv "$APP_ROOT/.venv"
-"$APP_ROOT/.venv/bin/pip" install --no-cache-dir --no-deps --require-hashes --requirement "$SOURCE_ROOT/deploy/requirements.txt"
+PIP_CONSTRAINT="$SOURCE_ROOT/deploy/build-constraints.txt" \
+  "$APP_ROOT/.venv/bin/pip" install --no-cache-dir --no-deps --require-hashes --requirement "$SOURCE_ROOT/deploy/requirements.txt"
 chown -R root:kylin-guard "$APP_ROOT"
 chown -R kylin-guard:kylin-guard "$APP_ROOT/data"
 if command -v setfacl >/dev/null 2>&1; then
