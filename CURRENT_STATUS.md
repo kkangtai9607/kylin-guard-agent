@@ -1,5 +1,11 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 LoongArch maturin 约束修正为 1.9.4
+
+- 官方麒麟 LoongArch VM 新错误显示源码包构建依赖要求 `maturin>=1.9,<2.0`，上一版 `maturin==1.8.7` 约束过低，导致 pip 构建依赖解析冲突。
+- 已检查 `maturin 1.9.0` 至 `1.9.4` 源码 `Cargo.toml`，均声明 `edition = "2021"`、`rust-version = "1.74"`，可避开 Cargo 1.82 不支持 `edition2024` 的问题；因此将 `deploy/build-constraints.txt` 修正为 `maturin==1.9.4`。
+- 该变更只影响 pip 构建隔离环境中的 build backend 版本，不改变运行时依赖、安全策略、默认 `READ_ONLY` 或 MCP Tool 行为。
+
 ## 2026-07-14 LoongArch maturin 构建后端约束
 
 - 官方麒麟 LoongArch VM 新错误为构建 `maturin` 自身时触发 Cargo `edition2024`，来源是 pip 构建隔离环境为 `pydantic-core`/`rpds-py` 等源码包临时拉取了过新的 build backend。

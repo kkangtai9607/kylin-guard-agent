@@ -2,6 +2,7 @@
 #
 # Newer maturin releases use Rust edition2024 and fail with the Cargo 1.82
 # toolchain currently available on the official LoongArch VM.  Pydantic-core
-# and rpds-py may need maturin only inside pip's isolated build environment, so
-# keep the build backend pinned separately from runtime requirements.
-maturin==1.8.7
+# and rpds-py require maturin >=1.9,<2.0 inside pip's isolated build
+# environment, so pin the newest checked 1.9.x release that still declares
+# Rust edition2021.
+maturin==1.9.4
