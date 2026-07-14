@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 LoongArch cryptography 构建兼容修复
+
+- 官方麒麟 LoongArch VM 第三轮安装失败定位为 `cryptography==49.0.0` 源码构建链引入 `archery 1.2.2`，该 Rust crate 同样要求 Cargo `edition2024`，目标机 Cargo 1.82.0 无法解析，导致 `metadata-generation-failed`。
+- 已进一步收紧部署依赖：显式锁定 `cryptography==42.0.8` 与 `cffi==1.17.1`，避免解析到 2026 年新 Rust 依赖链；继续保持 `mcp==1.28.1` 与 `pydantic-core==2.33.2`。
+- 本轮真实回归：`uv run pytest -q` 110 项通过（仅 Starlette TestClient 第三方弃用警告）；`uv run ruff check backend mcp_server scripts` 通过；`uv run mypy backend mcp_server` 通过（88 个源文件）；`uv run python scripts/security_scan.py` 通过（196 个文本/源码文件）；`uv run python scripts/validate_phase0.py` 通过。
+- LoongArch 仍需在官方 VM 使用最新 `main` 重新拉取后验证；若后续仍有源码构建失败，优先继续收紧依赖或改用离线 wheelhouse，不升级系统 Rust 作为首选路径。
+
 ## 2026-07-14 LoongArch 安装依赖兼容修复
 
 - 官方麒麟 LoongArch VM 第二轮安装失败定位为依赖构建问题：pip 拉取到过新的 `pydantic-core` 源码包，构建元数据时要求 Rust/Cargo `edition2024`，而目标机 Cargo 1.82.0 不支持该特性，导致 `metadata-generation-failed`。

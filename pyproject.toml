@@ -5,6 +5,8 @@ description = "KylinGuard Agent backend foundation"
 requires-python = ">=3.10,<3.14"
 dependencies = [
   "alembic>=1.13,<2",
+  "cffi>=1.16,<1.18",
+  "cryptography>=42.0.8,<43",
   "fastapi>=0.115,<1",
   "mcp>=1.28,<1.29",
   "pydantic>=2.11,<2.12",
