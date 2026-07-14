@@ -136,7 +136,7 @@ class CleanupCandidateClassifier:
             reasons.append("RETENTION_PERIOD_NOT_MET")
         if use_state == FileUseState.OPEN:
             reasons.append("FILE_IS_OPEN")
-        elif use_state == FileUseState.UNKNOWN:
+        elif use_state == FileUseState.UNKNOWN and not low_risk_disposable:
             reasons.append("OPEN_FILE_STATE_UNKNOWN")
         if reasons:
             return CleanupDecision(eligible=False, reason_codes=reasons)
@@ -175,6 +175,27 @@ class CleanupCandidateClassifier:
         return any(lowered.endswith(suffix) for suffix in self.policy.allowed_suffixes)
 
     def _is_low_risk_disposable(self, target: Path) -> bool:
+        lowered = target.name.lower()
+        disposable_suffixes = (
+            ".tmp",
+            ".cache",
+            ".msi",
+            ".iso",
+            ".zip",
+            ".tar",
+            ".tgz",
+            ".tar.gz",
+            ".7z",
+            ".rar",
+            ".rpm",
+            ".deb",
+            ".apk",
+            ".dmg",
+            ".pkg",
+            ".exe",
+        )
+        if not any(lowered.endswith(suffix) for suffix in disposable_suffixes):
+            return False
         parents = [target.parent, *target.parents]
         return any(parent.name.lower() in self.policy.low_risk_dir_names for parent in parents)
 

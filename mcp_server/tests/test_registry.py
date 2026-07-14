@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import mcp_server.providers as providers
 from mcp_server.providers import DemoProvider, ReadOnlyProvider, redact_text
 from mcp_server.registry import ToolRegistry
 
@@ -86,6 +87,23 @@ def test_symlink_escape_is_not_scanned(tmp_path: Path) -> None:
     provider = ReadOnlyProvider((allowed,))
     result = provider.large_file_scan(str(allowed), min_bytes=1)
     assert result["files"] == []
+
+
+def test_open_file_lookup_falls_back_to_procfs_without_lsof(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if not Path("/proc").is_dir():
+        pytest.skip("procfs fallback is Linux-only")
+    target = tmp_path / "Downloads" / "installer.msi"
+    target.parent.mkdir()
+    target.write_bytes(b"x" * 16)
+    monkeypatch.setitem(providers.FIXED_COMMANDS, "lsof", (str(tmp_path / "missing-lsof"), "--"))
+
+    result = ReadOnlyProvider(allowed_roots=(tmp_path,)).open_file_lookup(str(target))
+
+    assert result["supported"] is True
+    assert result["method"] == "procfs_fd"
+    assert "raw" in result
 
 
 def test_parameter_validation_and_missing_capability() -> None:

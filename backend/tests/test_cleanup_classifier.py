@@ -74,6 +74,20 @@ def test_new_installer_in_downloads_is_cleanup_candidate(tmp_path: Path) -> None
     assert decision.candidate.classification == "DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE"
 
 
+def test_new_installer_in_downloads_is_visible_when_open_state_unknown(tmp_path: Path) -> None:
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    target = downloads / "big-test-installer.msi"
+    target.write_bytes(b"x" * 16)
+
+    decision = classifier(tmp_path).classify(str(target), use_state=FileUseState.UNKNOWN)
+
+    assert decision.eligible is True
+    assert decision.reason_codes == ["SAFE_CANDIDATE"]
+    assert decision.candidate is not None
+    assert decision.candidate.classification == "DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE"
+
+
 def test_sensitive_installer_name_is_never_candidate(tmp_path: Path) -> None:
     downloads = tmp_path / "Downloads"
     downloads.mkdir()

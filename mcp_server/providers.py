@@ -334,9 +334,55 @@ class ReadOnlyProvider:
         target = self._safe_path(path)
         executable = Path(FIXED_COMMANDS["lsof"][0])
         if not executable.exists():
-            return {"path": str(target), "supported": False, "reason": "lsof unavailable"}
+            return self._proc_open_file_lookup(target)
         output = self._run_argv((*FIXED_COMMANDS["lsof"], str(target)), 10, 131072)
         return {"path": str(target), "supported": True, "raw": output}
+
+    def _proc_open_file_lookup(self, target: Path) -> dict[str, Any]:
+        """Best-effort Linux fallback when lsof is absent.
+
+        This is read-only and deterministic: it walks /proc/*/fd symlinks and
+        reports matching PIDs. Permission-denied entries are skipped and exposed
+        as a warning count instead of making the whole tool fail.
+        """
+        proc = Path("/proc")
+        if not proc.is_dir():
+            return {"path": str(target), "supported": False, "reason": "procfs unavailable"}
+        try:
+            target_stat = target.stat()
+        except OSError:
+            return {"path": str(target), "supported": False, "reason": "target stat failed"}
+        matches: list[str] = []
+        denied = 0
+        for pid_dir in proc.iterdir():
+            if not pid_dir.name.isdigit():
+                continue
+            fd_dir = pid_dir / "fd"
+            try:
+                fd_entries = tuple(fd_dir.iterdir())
+            except OSError:
+                denied += 1
+                continue
+            for fd in fd_entries:
+                try:
+                    fd_stat = fd.stat()
+                except OSError:
+                    continue
+                if fd_stat.st_ino == target_stat.st_ino and fd_stat.st_dev == target_stat.st_dev:
+                    comm = ""
+                    try:
+                        comm = (pid_dir / "comm").read_text(encoding="utf-8", errors="replace").strip()
+                    except OSError:
+                        comm = "unknown"
+                    matches.append(f"pid={pid_dir.name} comm={redact(comm)} fd={fd.name}")
+                    break
+        return {
+            "path": str(target),
+            "supported": True,
+            "method": "procfs_fd",
+            "raw": "\n".join(matches),
+            "warnings": [f"proc_fd_permission_denied={denied}"] if denied else [],
+        }
 
     def journal_query(self, unit: str | None = None, lines: int = 100) -> dict[str, Any]:
         if not 1 <= lines <= 1000:

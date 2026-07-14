@@ -71,3 +71,30 @@ def test_analysis_rejects_when_occupancy_capability_is_unknown(tmp_path: Path) -
     decisions = service.analyze_large_file_result({"data": {"files": [{"path": str(target)}]}})
     if decisions[0].eligible is False:
         assert "OPEN_FILE_STATE_UNKNOWN" in decisions[0].reason_codes
+
+
+def test_analysis_keeps_download_installer_when_occupancy_capability_is_unknown(
+    tmp_path: Path,
+) -> None:
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    target = downloads / "toolkit.msi"
+    target.write_bytes(b"x" * 16)
+    client = KylinGuardMCPClient(
+        ToolRegistry(ReadOnlyProvider(allowed_roots=(tmp_path,), cleanup_roots=(downloads,)))
+    )
+    service = CleanupAnalysisService(
+        client,
+        CleanupPolicy(
+            allowed_roots=(downloads,),
+            protected_paths=(),
+            minimum_age_days=7,
+            minimum_size_bytes=8,
+        ),
+    )
+
+    decisions = service.analyze_large_file_result({"data": {"files": [{"path": str(target)}]}})
+
+    assert decisions[0].eligible is True
+    assert decisions[0].candidate is not None
+    assert decisions[0].candidate.classification == "DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE"

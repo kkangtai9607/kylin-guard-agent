@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 清理候选大文件不显示修复
+
+- 针对“页面显示清理候选为空，但 `/tmp` 或 Downloads 中实际存在大于 10 MB 的 `.msi` 测试文件”的反馈，已定位关键原因：候选分类阶段会额外调用 `open_file_lookup` 判断文件是否被占用；当目标机未安装 `/usr/bin/lsof` 或占用检测能力不可用时，旧逻辑将状态标记为 `OPEN_FILE_STATE_UNKNOWN` 并排除候选，导致大文件被扫描到也不展示。
+- 已为 `open_file_lookup` 增加 Linux `/proc/*/fd` 只读回退：缺少 `lsof` 时通过 inode/device 匹配打开文件的进程，不引入通用 Shell、不执行写操作、不放宽路径白名单。
+- 已调整清理分类策略：普通日志在占用状态未知时仍失败关闭；但位于 `Downloads`、`.cache`、`tmp/temp` 等低风险目录中的 `.msi/.iso/.zip/.rpm/.deb/.exe` 等一次性下载/临时文件，即使占用检测暂不可用，也会先展示为“可处理候选”，执行删除前仍会重新校验路径、大小、快照哈希和占用状态。
+- 新增测试覆盖：无 `lsof` 时 `/proc` 回退、占用状态未知时 Downloads 中 `.msi` 仍进入候选、普通日志 UNKNOWN 仍拒绝。
+- 本轮真实回归：`uv run ruff check backend mcp_server` 通过；`uv run mypy backend mcp_server` 通过；`uv run pytest` 130 项通过、1 项 Windows 下 Linux `/proc` 专用测试跳过；`python scripts/security_scan.py` 通过。
+
 ## 2026-07-14 运维执行型交互文案与诊断结果说明优化
 
 - 针对“页面过于像只读/安全演示、用户不知道如何删除”的反馈，已将前端导航与状态文案收敛为常规运维表达：`READ_ONLY` 在页面显示为“诊断模式”，`CONTROLLED_EXECUTION` 显示为“运维执行模式”；“安全审批中心”改为“风险确认中心”，“受控操作台”改为“运维操作台”。
