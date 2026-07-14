@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-15 清理候选 observed_file 兜底修复
+
+- 针对“发现 5 个超过阈值的大文件，但清理候选仍不列出来”的继续反馈，已增加第二层兜底：只要 `large_file_scan.files` 返回了文件记录，即使后续路径策略、stat 或占用检测失败，`cleanup_analysis` 也会返回 `observed_file`，前端可展示路径、大小和排除原因。
+- 前端清理候选表已使用 `candidate || observed_file` 展示扫描结果；只有 `eligible=true` 且存在 `candidate_id` 的行才允许点击“选择并清理”。因此“扫描到但不可清理”的文件会显示为“已排除”，不会再消失。
+- 新增测试覆盖策略拒绝路径时仍返回 observed_file。该修复只增强可解释性，不放宽删除权限。
+- 本轮真实回归：`npm run type-check` 通过；`npm run build` 通过（仅 Vite chunk 体积提示）；`uv run ruff check backend mcp_server` 通过；`uv run mypy backend mcp_server` 通过；`uv run pytest` 131 项通过、1 项 Windows 下 Linux `/proc` 专用测试跳过；`python scripts/security_scan.py` 通过。
+
 ## 2026-07-15 清理候选排除明细展示修复
 
 - 针对“结论显示发现 5 个超过阈值的大文件，但清理候选区域仍显示本次没有清理候选”的反馈，已拆分“扫描到的大文件”和“可直接发起清理的候选”：即使某个大文件因为类型、保护路径、占用状态或保留期被排除，也会在表格中展示路径、大小、类型和排除原因，不再只给出 0 个可清理候选的摘要。

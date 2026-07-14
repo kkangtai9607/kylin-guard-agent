@@ -98,3 +98,36 @@ def test_analysis_keeps_download_installer_when_occupancy_capability_is_unknown(
     assert decisions[0].eligible is True
     assert decisions[0].candidate is not None
     assert decisions[0].candidate.classification == "DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE"
+
+
+def test_analysis_returns_observed_file_when_candidate_is_rejected_by_policy(
+    tmp_path: Path,
+) -> None:
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "outside"
+    allowed.mkdir()
+    outside.mkdir()
+    target = outside / "large.bin"
+    target.write_bytes(b"x" * 16)
+    client = KylinGuardMCPClient(
+        ToolRegistry(ReadOnlyProvider(allowed_roots=(tmp_path,), cleanup_roots=(outside,)))
+    )
+    service = CleanupAnalysisService(
+        client,
+        CleanupPolicy(
+            allowed_roots=(allowed,),
+            protected_paths=(),
+            minimum_age_days=7,
+            minimum_size_bytes=8,
+        ),
+    )
+
+    decisions = service.analyze_large_file_result(
+        {"data": {"files": [{"path": str(target), "size": target.stat().st_size}]}}
+    )
+
+    assert decisions[0].eligible is False
+    assert decisions[0].candidate is None
+    assert decisions[0].observed_file is not None
+    assert decisions[0].observed_file.path == str(target)
+    assert decisions[0].observed_file.size_bytes == 16

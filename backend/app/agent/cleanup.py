@@ -262,5 +262,13 @@ class CleanupAnalysisService:
             state = FileUseState.UNKNOWN
             if occupancy.status == "SUCCEEDED" and occupancy.data.get("supported") is True:
                 state = FileUseState.OPEN if str(occupancy.data.get("raw", "")).strip() else FileUseState.NOT_OPEN
-            decisions.append(self.classifier.classify(path, use_state=state))
+            decision = self.classifier.classify(path, use_state=state)
+            if decision.observed_file is None:
+                size = item.get("size")
+                decision.observed_file = CleanupObservedFile(
+                    path=path,
+                    size_bytes=size if isinstance(size, int) else 0,
+                    modified_at=datetime.now(timezone.utc),
+                )
+            decisions.append(decision)
         return decisions
