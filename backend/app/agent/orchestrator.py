@@ -72,10 +72,15 @@ class AgentOrchestrator:
                 knowledge_hits = []
         cleanup_analysis: list[dict[str, Any]] = []
         if plan.intent == Intent.CLEANUP and evidence:
-            decisions = CleanupAnalysisService(self.mcp).analyze_large_file_result(
-                evidence[0].payload
+            large_file_record = next(
+                (record for record in evidence if record.tool_name == "large_file_scan"),
+                None,
             )
-            cleanup_analysis = [item.model_dump(mode="json") for item in decisions]
+            if large_file_record is not None:
+                decisions = CleanupAnalysisService(self.mcp).analyze_large_file_result(
+                    large_file_record.payload
+                )
+                cleanup_analysis = [item.model_dump(mode="json") for item in decisions]
         return {
             "plan": plan.model_dump(mode="json"),
             **composed,
@@ -203,6 +208,22 @@ class AgentOrchestrator:
                 f"磁盘：已用 {AgentOrchestrator._format_bytes(used)} / 总计 {AgentOrchestrator._format_bytes(total)}，使用率 {percent:.1f}%"
             )
             recommendations.append("如果需要找可清理对象，请输入“分析磁盘空间不足的原因，并列出安全清理候选”。")
+
+            if "large_file_scan" in by_tool:
+                large_file_data = AgentOrchestrator._tool_data(by_tool["large_file_scan"])
+                raw_files = large_file_data.get("files")
+                cleanup_files: list[Any] = raw_files if isinstance(raw_files, list) else []
+                raw_roots = large_file_data.get("scanned_roots")
+                scanned_roots: list[Any] = raw_roots if isinstance(raw_roots, list) else []
+                eligible_count = sum(1 for item in cleanup_analysis if item.get("eligible"))
+                answer += (
+                    f" 同时已在受控清理根中扫描可清理候选，发现 {len(cleanup_files)} 个超过阈值的大文件，"
+                    f"其中 {eligible_count} 个满足安全清理规则。"
+                )
+                if scanned_roots:
+                    findings.append(f"清理候选扫描根：{', '.join(str(item) for item in scanned_roots[:8])}")
+                if cleanup_files:
+                    findings.append(f"大文件候选数量：{len(cleanup_files)}，安全可清理候选数量：{eligible_count}")
 
         elif "large_file_scan" in by_tool:
             data = AgentOrchestrator._tool_data(by_tool["large_file_scan"])

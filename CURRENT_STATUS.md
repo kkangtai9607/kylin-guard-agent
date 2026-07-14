@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 磁盘诊断默认根路径与清理候选双工具修复
+
+- 针对页面输入“分析当前磁盘占用，给出根因和可清理候选”仍显示扫描 `/opt/kylin-guard` 的问题，已修复真实中文确定性路由：磁盘占用默认强制使用 `disk_usage_scan(path="/")`，不再由模型或服务工作目录决定扫描路径。
+- 对同时包含“磁盘占用”和“可清理候选”的问题，计划会同时包含 `disk_usage_scan(path="/")` 与 `large_file_scan(path="__cleanup_roots__", min_bytes=10000000, limit=50)`；如果在线 LLM 返回 `/opt/kylin-guard` 或 `.`，服务端会在执行前规范化为安全固定参数。
+- 清理候选分析已改为读取 `large_file_scan` 对应证据，而不是默认取第一条证据；诊断摘要会同时展示磁盘使用率、受控清理根、大文件数量和安全可清理候选数量。
+- 安全边界保持不变：READ_ONLY 只诊断和列候选；删除仍必须进入 `CONTROLLED_EXECUTION`、dry-run、人工审批、备份、执行后验证和审计。
+- 本轮真实回归：新增磁盘/清理规划测试通过；规划相关 15 项测试通过；全量 `pytest -q` 125 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过。
+
 ## 2026-07-14 登录用户 Home 低风险目录显式扫描
 
 - 针对“默认登录用户是 `vmuser` 或其他用户时，是否应扫描其 Home 子目录”的反馈，已新增 `KYLIN_GUARD_USER_HOME_SCAN_PATHS` 配置；后端会优先扫描显式配置的登录用户 Home 或已绑定低风险子目录，再尝试枚举 `/home`，因此 `/home` 无权限时不再丢失显式目标或返回 500。
