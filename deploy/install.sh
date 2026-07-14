@@ -28,6 +28,46 @@ getent group kylin-guard >/dev/null || groupadd --system kylin-guard
 id kylin-guard >/dev/null 2>&1 || useradd --system --gid kylin-guard --home "$APP_ROOT" --shell /usr/sbin/nologin kylin-guard
 id kylin-guard-exec >/dev/null 2>&1 || useradd --system --gid kylin-guard --home "$APP_ROOT" --shell /usr/sbin/nologin kylin-guard-exec
 
+infer_source_login_home() {
+  case "$SOURCE_ROOT" in
+    /home/*/*)
+      local login_name
+      login_name=$(printf '%s\n' "$SOURCE_ROOT" | cut -d/ -f3)
+      printf '/home/%s\n' "$login_name"
+      ;;
+  esac
+}
+
+configure_user_home_scan() {
+  local login_home
+  login_home=$(infer_source_login_home || true)
+  if [[ -z "$login_home" || ! -d "$login_home" ]]; then
+    return
+  fi
+
+  local scan_paths=(
+    "$login_home/.cache"
+    "$login_home/Downloads"
+    "$login_home/tmp"
+  )
+  local scan_paths_csv
+  scan_paths_csv=$(IFS=,; printf '%s' "${scan_paths[*]}")
+
+  install -d -m 0750 -o root -g kylin-guard /etc/kylin-guard
+  if [[ ! -f /etc/kylin-guard/secrets.env ]]; then
+    install -m 0640 -o root -g kylin-guard /dev/null /etc/kylin-guard/secrets.env
+  fi
+  if ! grep -q '^KYLIN_GUARD_USER_HOME_SCAN_PATHS=' /etc/kylin-guard/secrets.env; then
+    printf 'KYLIN_GUARD_USER_HOME_SCAN_PATHS=%s\n' "$scan_paths_csv" >> /etc/kylin-guard/secrets.env
+  fi
+
+  install -d -m 0755 -o root -g root /etc/systemd/system/kylin-guard.service.d
+  {
+    printf '[Service]\n'
+    printf 'BindReadOnlyPaths=-%s/.cache -%s/Downloads -%s/tmp\n' "$login_home" "$login_home" "$login_home"
+  } > /etc/systemd/system/kylin-guard.service.d/20-user-home-scan.conf
+}
+
 install -d -m 0750 -o kylin-guard -g kylin-guard "$APP_ROOT" "$APP_ROOT/data"
 cp -a "$SOURCE_ROOT/backend" "$SOURCE_ROOT/mcp_server" "$SOURCE_ROOT/config" "$SOURCE_ROOT/pyproject.toml" "$SOURCE_ROOT/uv.lock" "$SOURCE_ROOT/alembic.ini" "$APP_ROOT/"
 install -d -m 0755 "$APP_ROOT/frontend"
@@ -49,6 +89,7 @@ if command -v setfacl >/dev/null 2>&1; then
 fi
 install -m 0644 "$SOURCE_ROOT/deploy/kylin-guard.service" /etc/systemd/system/kylin-guard.service
 install -m 0644 "$SOURCE_ROOT/deploy/kylin-guard-exec.service" /etc/systemd/system/kylin-guard-exec.service
+configure_user_home_scan
 install -d -m 0755 -o root -g root /usr/local/lib/kylin-guard
 install -m 0750 -o root -g root "$SOURCE_ROOT/deploy/kylin_guard_privileged.py" /usr/local/lib/kylin-guard/kylin_guard_privileged.py
 systemctl daemon-reload

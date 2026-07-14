@@ -66,28 +66,66 @@ class ControlledExecutionConfig(BaseModel):
     )
 
 
+def parse_path_list(raw: str | None) -> tuple[Path, ...]:
+    if raw is None:
+        return ()
+    return tuple(Path(item.strip()) for item in raw.replace(";", ",").split(",") if item.strip())
+
+
+def _safe_user_home_subdirs(subdirs: tuple[str, ...]) -> tuple[str, ...]:
+    safe: list[str] = []
+    for subdir in subdirs:
+        if subdir.startswith("/") or ".." in Path(subdir).parts:
+            continue
+        safe.append(subdir)
+    return tuple(safe)
+
+
+def _append_user_home_scan_targets(
+    roots: list[Path], seen: set[Path], base_path: Path, subdirs: tuple[str, ...]
+) -> None:
+    try:
+        if not base_path.is_dir() or base_path.is_symlink():
+            return
+        safe_subdirs = _safe_user_home_subdirs(subdirs)
+        if base_path.name in safe_subdirs:
+            resolved = base_path.resolve()
+            if resolved not in seen:
+                roots.append(base_path)
+                seen.add(resolved)
+            return
+        for subdir in safe_subdirs:
+            target = base_path / subdir
+            if target.is_dir() and not target.is_symlink():
+                resolved = target.resolve()
+                if resolved not in seen:
+                    roots.append(target)
+                    seen.add(resolved)
+    except OSError:
+        return
+
+
 def user_home_scan_roots(
-    *, enabled: bool, subdirs: tuple[str, ...], home_root: Path = Path("/home")
+    *,
+    enabled: bool,
+    subdirs: tuple[str, ...],
+    home_root: Path = Path("/home"),
+    explicit_paths: tuple[Path, ...] = (),
 ) -> tuple[Path, ...]:
-    if not enabled or not home_root.is_dir():
+    if not enabled:
         return ()
     roots: list[Path] = []
+    seen: set[Path] = set()
+    for explicit_path in explicit_paths:
+        _append_user_home_scan_targets(roots, seen, explicit_path, subdirs)
+    if not home_root.is_dir():
+        return tuple(roots)
     try:
         user_dirs = tuple(home_root.iterdir())
     except OSError:
-        return ()
+        return tuple(roots)
     for user_dir in user_dirs:
-        try:
-            if not user_dir.is_dir() or user_dir.is_symlink():
-                continue
-            for subdir in subdirs:
-                if subdir.startswith("/") or ".." in Path(subdir).parts:
-                    continue
-                target = user_dir / subdir
-                if target.is_dir() and not target.is_symlink():
-                    roots.append(target)
-        except OSError:
-            continue
+        _append_user_home_scan_targets(roots, seen, user_dir, subdirs)
     return tuple(roots)
 
 
@@ -100,6 +138,7 @@ class AppConfig(BaseModel):
     snapshot_interval_seconds: int = Field(default=300, ge=30, le=86400)
     user_home_scan_enabled: bool = True
     user_home_scan_subdirs: tuple[str, ...] = (".cache", "Downloads", "tmp")
+    user_home_scan_paths: tuple[Path, ...] = ()
     controlled_execution: ControlledExecutionConfig = ControlledExecutionConfig()
 
     def read_only_scan_roots(self) -> tuple[Path, ...]:
@@ -112,6 +151,7 @@ class AppConfig(BaseModel):
             *user_home_scan_roots(
                 enabled=self.user_home_scan_enabled,
                 subdirs=self.user_home_scan_subdirs,
+                explicit_paths=self.user_home_scan_paths,
             ),
         )
 
@@ -121,6 +161,7 @@ class AppConfig(BaseModel):
             *user_home_scan_roots(
                 enabled=self.user_home_scan_enabled,
                 subdirs=self.user_home_scan_subdirs,
+                explicit_paths=self.user_home_scan_paths,
             ),
         )
 
@@ -133,6 +174,7 @@ class EnvironmentSettings(BaseSettings):
     snapshot_scheduler_enabled: bool | None = None
     snapshot_interval_seconds: int | None = None
     user_home_scan_enabled: bool | None = None
+    user_home_scan_paths: str | None = None
 
 
 def load_config(path: Path | None = None) -> AppConfig:
@@ -157,6 +199,8 @@ def load_config(path: Path | None = None) -> AppConfig:
         overrides["snapshot_interval_seconds"] = env.snapshot_interval_seconds
     if env.user_home_scan_enabled is not None:
         overrides["user_home_scan_enabled"] = env.user_home_scan_enabled
+    if env.user_home_scan_paths is not None:
+        overrides["user_home_scan_paths"] = parse_path_list(env.user_home_scan_paths)
     return config.model_copy(update=overrides)
 
 

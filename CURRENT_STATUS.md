@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 登录用户 Home 低风险目录显式扫描
+
+- 针对“默认登录用户是 `vmuser` 或其他用户时，是否应扫描其 Home 子目录”的反馈，已新增 `KYLIN_GUARD_USER_HOME_SCAN_PATHS` 配置；后端会优先扫描显式配置的登录用户 Home 或已绑定低风险子目录，再尝试枚举 `/home`，因此 `/home` 无权限时不再丢失显式目标或返回 500。
+- `deploy/install.sh` 会在源码目录位于 `/home/<user>/...` 时自动推断登录用户 Home，并写入 `/etc/kylin-guard/secrets.env`：`/home/<user>/.cache`、`/home/<user>/Downloads`、`/home/<user>/tmp`；已有配置不会被覆盖。
+- systemd 仍保留 `ProtectHome=true`，安装脚本只额外创建 `20-user-home-scan.conf`，通过 `BindReadOnlyPaths` 只读绑定上述低风险子目录，不开放整个 `/home/<user>`，也不开放 `.ssh`、`.gnupg`、keyrings 等敏感目录。
+- 安全边界保持不变：READ_ONLY 只分析和展示候选；删除仍必须进入 `CONTROLLED_EXECUTION`、dry-run、人工审批、备份、执行后验证和审计。
+- 本轮真实回归：针对性 8 项用户目录扫描测试通过；全量 `pytest -q` 123 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过。
+
 ## 2026-07-14 `/home` 无权限枚举安全降级
 
 - 针对 VM 日志中的 `PermissionError: [Errno 13] Permission denied: '/home'`，已修复 `user_home_scan_roots()`：当服务账号无法枚举 `/home` 时安全降级为空用户目录扫描结果，不再让 Agent/MCP 接口返回 500。

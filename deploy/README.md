@@ -34,6 +34,7 @@ bash deploy/healthcheck.sh
 ```dotenv
 KYLIN_GUARD_MODE=READ_ONLY
 KYLIN_GUARD_SNAPSHOT_SCHEDULER_ENABLED=false
+KYLIN_GUARD_USER_HOME_SCAN_PATHS=/home/vmuser/.cache,/home/vmuser/Downloads,/home/vmuser/tmp
 ```
 
 新 DeepSeek Key 应在提供商侧轮换后再注入；不得使用聊天中曾暴露的 Key。
