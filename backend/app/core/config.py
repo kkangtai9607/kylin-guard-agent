@@ -72,7 +72,11 @@ def user_home_scan_roots(
     if not enabled or not home_root.is_dir():
         return ()
     roots: list[Path] = []
-    for user_dir in home_root.iterdir():
+    try:
+        user_dirs = tuple(home_root.iterdir())
+    except OSError:
+        return ()
+    for user_dir in user_dirs:
         try:
             if not user_dir.is_dir() or user_dir.is_symlink():
                 continue

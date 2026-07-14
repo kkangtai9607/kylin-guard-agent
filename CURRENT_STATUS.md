@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 `/home` 无权限枚举安全降级
+
+- 针对 VM 日志中的 `PermissionError: [Errno 13] Permission denied: '/home'`，已修复 `user_home_scan_roots()`：当服务账号无法枚举 `/home` 时安全降级为空用户目录扫描结果，不再让 Agent/MCP 接口返回 500。
+- 该修复解释了“我用 root 跑 git/安装但页面仍报错”的原因：systemd 后端服务实际以 `kylin-guard` 等最小权限账号运行，不能假设拥有 root 对 `/home` 的遍历权限。
+- 安全边界保持不变：不会为了修复 500 而扩大 `/home` 权限；如确需扫描用户低风险目录，应由部署侧显式授予服务账号读取 `.cache`、`Downloads`、`tmp` 的最小权限。
+- 本轮真实回归：相关 7 项测试通过；全量 `pytest -q` 118 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过。
+
 ## 2026-07-14 MCP 工具自检错误展示修复
 
 - 针对页面点击 MCP 功能显示 `Internal Server Error` 的反馈，已调整 `/api/v1/mcp/tools/{tool_name}/test`：工具自检失败不再转换成 HTTP 422/500，而是以 HTTP 200 返回标准 `ToolResult`，由页面展示 `status=FAILED`、`error_code` 和 `warnings`。
