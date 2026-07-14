@@ -60,6 +60,32 @@ def test_database_and_audit_logs_are_never_candidates(tmp_path: Path) -> None:
         assert "CRITICAL_OR_DATABASE_LOG" in decision.reason_codes
 
 
+def test_new_installer_in_downloads_is_cleanup_candidate(tmp_path: Path) -> None:
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    target = downloads / "big-test-installer.msi"
+    target.write_bytes(b"x" * 16)
+
+    decision = classifier(tmp_path).classify(str(target), use_state=FileUseState.NOT_OPEN)
+
+    assert decision.eligible is True
+    assert decision.reason_codes == ["SAFE_CANDIDATE"]
+    assert decision.candidate is not None
+    assert decision.candidate.classification == "DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE"
+
+
+def test_sensitive_installer_name_is_never_candidate(tmp_path: Path) -> None:
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    target = downloads / "secret-token-installer.msi"
+    target.write_bytes(b"x" * 16)
+
+    decision = classifier(tmp_path).classify(str(target), use_state=FileUseState.NOT_OPEN)
+
+    assert decision.eligible is False
+    assert "CRITICAL_OR_DATABASE_LOG" in decision.reason_codes
+
+
 def test_candidate_invalid_after_file_changes(tmp_path: Path) -> None:
     target = tmp_path / "application.log"
     old_file(target)

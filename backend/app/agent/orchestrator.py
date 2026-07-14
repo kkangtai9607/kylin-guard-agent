@@ -277,6 +277,33 @@ class AgentOrchestrator:
                 findings.append("未在 ss/netstat 输出中发现该端口。")
             recommendations.append("如发现陌生监听端口，应结合进程列表和服务归属继续确认。")
 
+        elif "network_config_snapshot" in by_tool or "network_socket_list" in by_tool:
+            config_data = AgentOrchestrator._tool_data(by_tool.get("network_config_snapshot", {}))
+            socket_data = AgentOrchestrator._tool_data(by_tool.get("network_socket_list", {}))
+            raw_addresses = config_data.get("addresses")
+            raw_routes = config_data.get("routes")
+            raw_dns = config_data.get("dns")
+            raw_sockets = socket_data.get("raw")
+            addresses: list[Any] = raw_addresses if isinstance(raw_addresses, list) else []
+            routes: list[Any] = raw_routes if isinstance(raw_routes, list) else []
+            dns: list[Any] = raw_dns if isinstance(raw_dns, list) else []
+            socket_lines = str(raw_sockets).splitlines() if raw_sockets else []
+            headline = "网络状态已采集"
+            level = "ok"
+            answer = (
+                f"已采集网络地址、路由/DNS 与监听端口信息：地址记录 {len(addresses)} 条，"
+                f"路由记录 {len(routes)} 条，DNS 记录 {len(dns)} 条，监听记录 {len(socket_lines)} 行。"
+            )
+            if routes:
+                findings.append(f"路由线索：{routes[0]}")
+            if addresses:
+                findings.append(f"网卡地址线索：{addresses[0]}")
+            if dns:
+                findings.append(f"DNS 线索：{dns[0]}")
+            if socket_lines:
+                findings.append(f"监听端口记录数：{len(socket_lines)}")
+            recommendations.append("如需定位具体端口，请输入“查看 8080 端口由哪个进程占用”这类带端口号的问题。")
+
         elif "system_snapshot" in by_tool:
             data = AgentOrchestrator._tool_data(by_tool["system_snapshot"])
             disk = data.get("disk") if isinstance(data.get("disk"), dict) else {}

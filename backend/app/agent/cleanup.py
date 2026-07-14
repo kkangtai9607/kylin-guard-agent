@@ -25,7 +25,35 @@ class CleanupPolicy(BaseModel):
     protected_paths: tuple[Path, ...]
     minimum_age_days: int = Field(default=7, ge=1, le=3650)
     minimum_size_bytes: int = Field(default=10_000_000, ge=1)
-    allowed_suffixes: tuple[str, ...] = (".log", ".gz", ".old", ".tmp", ".cache")
+    allowed_suffixes: tuple[str, ...] = (
+        ".log",
+        ".gz",
+        ".old",
+        ".tmp",
+        ".cache",
+        ".msi",
+        ".iso",
+        ".zip",
+        ".tar",
+        ".tgz",
+        ".tar.gz",
+        ".7z",
+        ".rar",
+        ".rpm",
+        ".deb",
+        ".apk",
+        ".dmg",
+        ".pkg",
+        ".exe",
+    )
+    low_risk_dir_names: tuple[str, ...] = (
+        ".cache",
+        "cache",
+        "downloads",
+        "download",
+        "tmp",
+        "temp",
+    )
     forbidden_name_terms: tuple[str, ...] = (
         "audit",
         "journal",
@@ -35,6 +63,12 @@ class CleanupPolicy(BaseModel):
         "transaction",
         "redo",
         "wal",
+        "secret",
+        "token",
+        "password",
+        "credential",
+        "private-key",
+        "id_rsa",
     )
 
 
@@ -86,7 +120,7 @@ class CleanupCandidateClassifier:
 
         if not stat.S_ISREG(metadata.st_mode):
             reasons.append("NOT_REGULAR_FILE")
-        if target.suffix.lower() not in self.policy.allowed_suffixes:
+        if not self._suffix_allowed(target):
             reasons.append("FILE_TYPE_NOT_ALLOWED")
         lowered = target.name.lower()
         if any(term in lowered for term in self.policy.forbidden_name_terms):
@@ -97,7 +131,8 @@ class CleanupCandidateClassifier:
         reference = now or datetime.now(timezone.utc)
         modified = datetime.fromtimestamp(metadata.st_mtime, timezone.utc)
         age_seconds = (reference - modified).total_seconds()
-        if age_seconds < self.policy.minimum_age_days * 86400:
+        low_risk_disposable = self._is_low_risk_disposable(target)
+        if not low_risk_disposable and age_seconds < self.policy.minimum_age_days * 86400:
             reasons.append("RETENTION_PERIOD_NOT_MET")
         if use_state == FileUseState.OPEN:
             reasons.append("FILE_IS_OPEN")
@@ -127,8 +162,21 @@ class CleanupCandidateClassifier:
                 inode=metadata.st_ino,
                 device=metadata.st_dev,
                 snapshot_hash=snapshot_hash,
+                classification=(
+                    "DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE"
+                    if low_risk_disposable
+                    else "SAFE_LOG_OR_CACHE_CANDIDATE"
+                ),
             ),
         )
+
+    def _suffix_allowed(self, target: Path) -> bool:
+        lowered = target.name.lower()
+        return any(lowered.endswith(suffix) for suffix in self.policy.allowed_suffixes)
+
+    def _is_low_risk_disposable(self, target: Path) -> bool:
+        parents = [target.parent, *target.parents]
+        return any(parent.name.lower() in self.policy.low_risk_dir_names for parent in parents)
 
     def revalidate(self, candidate: CleanupCandidate, *, use_state: FileUseState) -> bool:
         decision = self.classify(candidate.path, use_state=use_state)

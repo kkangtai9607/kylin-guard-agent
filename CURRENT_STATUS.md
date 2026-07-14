@@ -1,5 +1,14 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 智能运维对话意图路由与清理候选实用性修复
+
+- 针对“查询网络状态”误返回系统快照、CPU/磁盘信息的问题，已重写 Agent 规划器的确定性中文关键词路由：网络状态类问题固定采集 `network_config_snapshot` 与 `network_socket_list`，带端口号的问题继续路由到 `port_owner_lookup`，不再被“占用”等泛词误判为磁盘问题。
+- 针对“分析磁盘空间不足并列出安全候选清理”识别不到 `/tmp`、用户 `Downloads/.cache/tmp` 中测试大文件的问题，清理分类器新增安装包与归档包后缀支持：`.msi`、`.iso`、`.zip`、`.tar/.tar.gz/.tgz`、`.7z`、`.rar`、`.rpm`、`.deb`、`.apk`、`.dmg`、`.pkg`、`.exe`。
+- 位于低风险目录（`Downloads`、`download`、`.cache`、`cache`、`tmp`、`temp`）中的上述临时/下载类大文件，可立即作为“安全候选清理”展示，不再必须等待 7 天保留期；但敏感命名（如 secret/token/password/credential/private-key/id_rsa）和审计/数据库/WAL/binlog 等仍会被确定性拒绝。
+- 安全边界保持不变：READ_ONLY 只扫描、诊断和列候选；真正删除仍必须在 `CONTROLLED_EXECUTION` 下由用户从候选发起 dry-run、人工审批、备份、执行后验证和审计，不允许 LLM 直接删除。
+- 网络诊断结果页新增结构化结论：显示网络地址、路由、DNS 与监听记录数量，并给出“带端口号继续定位”的建议，不再落到通用系统健康快照。
+- 本轮真实回归：`pytest -q` 128 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过。仅保留 Starlette TestClient 第三方弃用警告，不影响功能。
+
 ## 2026-07-14 磁盘诊断默认根路径与清理候选双工具修复
 
 - 针对页面输入“分析当前磁盘占用，给出根因和可清理候选”仍显示扫描 `/opt/kylin-guard` 的问题，已修复真实中文确定性路由：磁盘占用默认强制使用 `disk_usage_scan(path="/")`，不再由模型或服务工作目录决定扫描路径。
