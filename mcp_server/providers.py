@@ -17,9 +17,15 @@ FIXED_COMMANDS: dict[str, tuple[str, ...]] = {
     "ss": ("/usr/bin/ss", "-lntup"),
     "netstat_unix": ("/usr/bin/netstat", "-lntup"),
     "iostat": ("/usr/bin/iostat", "-x", "1", "1"),
+    "ip_addr": ("/usr/sbin/ip", "-details", "addr", "show"),
+    "ip_route": ("/usr/sbin/ip", "route", "show"),
     "lsof": ("/usr/bin/lsof", "--"),
     "journalctl": ("/usr/bin/journalctl", "--no-pager", "--output", "short-iso"),
+    "journalctl_kernel": ("/usr/bin/journalctl", "--no-pager", "--output", "short-iso", "-k"),
     "systemctl": ("/usr/bin/systemctl", "show", "--no-pager"),
+    "systemctl_timers": ("/usr/bin/systemctl", "list-timers", "--all", "--no-pager", "--plain", "--no-legend"),
+    "rpm_query": ("/usr/bin/rpm", "-qa", "--qf", "%{NAME} %{VERSION}-%{RELEASE} %{ARCH}\n"),
+    "last": ("/usr/bin/last", "-n"),
 }
 
 
@@ -134,6 +140,31 @@ class ReadOnlyProvider:
             "filesystems": filesystems,
         }
 
+    def memory_snapshot(self) -> dict[str, Any]:
+        meminfo = Path("/proc/meminfo")
+        if not meminfo.is_file():
+            return {"supported": False, "reason": "procfs meminfo unavailable"}
+        values: dict[str, int] = {}
+        for line in self._read_limited_lines(meminfo, limit=200):
+            if ":" not in line:
+                continue
+            key, raw_value = line.split(":", 1)
+            match = re.search(r"\d+", raw_value)
+            if match:
+                values[key] = int(match.group(0)) * 1024
+        total = values.get("MemTotal", 0)
+        available = values.get("MemAvailable", 0)
+        used = max(total - available, 0) if total else 0
+        return {
+            "supported": True,
+            "total": total,
+            "available": available,
+            "used": used,
+            "swap_total": values.get("SwapTotal", 0),
+            "swap_free": values.get("SwapFree", 0),
+            "raw_keys": {key: values[key] for key in sorted(values)[:80]},
+        }
+
     def process_list(self, limit: int = 100) -> dict[str, Any]:
         if Path("/proc").is_dir():
             rows: list[dict[str, Any]] = []
@@ -211,6 +242,47 @@ class ReadOnlyProvider:
             "free": usage.free,
             "filesystems": filesystems,
         }
+
+    def filesystem_inventory(self) -> dict[str, Any]:
+        mounts: list[dict[str, Any]] = []
+        mounts_file = Path("/proc/mounts")
+        if mounts_file.is_file():
+            for line in self._read_limited_lines(mounts_file, limit=300):
+                parts = line.split()
+                if len(parts) < 4:
+                    continue
+                device, mount_point, fs_type, options = parts[:4]
+                if any(mount_point.startswith(prefix) for prefix in ("/proc", "/sys", "/dev")):
+                    continue
+                item: dict[str, Any] = {
+                    "device": device,
+                    "mount_point": mount_point,
+                    "fs_type": fs_type,
+                    "options": options[:300],
+                }
+                try:
+                    usage = shutil.disk_usage(mount_point)
+                    item.update({"total": usage.total, "used": usage.used, "free": usage.free})
+                    if hasattr(os, "statvfs"):
+                        stats = os.statvfs(mount_point)
+                        item.update(
+                            {
+                                "files": stats.f_files,
+                                "files_free": stats.f_ffree,
+                                "files_used": max(stats.f_files - stats.f_ffree, 0),
+                            }
+                        )
+                except OSError:
+                    item["usage_supported"] = False
+                mounts.append(item)
+        else:
+            for root in self.allowed_roots:
+                try:
+                    usage = shutil.disk_usage(root)
+                    mounts.append({"mount_point": str(root), "total": usage.total, "used": usage.used, "free": usage.free})
+                except OSError:
+                    continue
+        return {"supported": bool(mounts), "mounts": mounts[:100]}
 
     def large_file_scan(
         self, path: str = ".", min_bytes: int = 10_000_000, limit: int = 100
@@ -308,6 +380,74 @@ class ReadOnlyProvider:
         if not executable.exists():
             return {"supported": False, "reason": "iostat unavailable"}
         return {"supported": True, "raw": self._run_fixed("iostat", 10, 131072)}
+
+    def network_config_snapshot(self) -> dict[str, Any]:
+        route_executable = Path(FIXED_COMMANDS["ip_route"][0])
+        resolv = Path("/etc/resolv.conf")
+        dns_lines = self._read_limited_lines(resolv, limit=50) if resolv.is_file() else []
+        if not route_executable.exists():
+            return {
+                "supported": False,
+                "reason": "ip command unavailable",
+                "dns": [redact_text(line) for line in dns_lines],
+            }
+        return {
+            "supported": True,
+            "routes": self._run_fixed("ip_route", 10, 131072).splitlines()[:200],
+            "addresses": self._run_fixed("ip_addr", 10, 131072).splitlines()[:300],
+            "dns": [redact_text(line) for line in dns_lines],
+        }
+
+    def package_inventory(self, limit: int = 200) -> dict[str, Any]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("limit out of range")
+        executable = Path(FIXED_COMMANDS["rpm_query"][0])
+        if not executable.exists():
+            return {"supported": False, "reason": "rpm unavailable", "packages": []}
+        rows = self._run_fixed("rpm_query", 20, 524288).splitlines()
+        return {"supported": True, "packages": rows[:limit], "total_visible": len(rows)}
+
+    def scheduled_task_inventory(self) -> dict[str, Any]:
+        crontab = Path("/etc/crontab")
+        cron_d = Path("/etc/cron.d")
+        result: dict[str, Any] = {
+            "crontab": [redact_text(line) for line in self._read_limited_lines(crontab, limit=120)] if crontab.is_file() else [],
+            "cron_d_files": [],
+            "timers_supported": False,
+            "timers": [],
+        }
+        if cron_d.is_dir():
+            try:
+                result["cron_d_files"] = [
+                    item.name for item in sorted(cron_d.iterdir(), key=lambda path: path.name)[:100]
+                    if item.is_file() and not item.is_symlink()
+                ]
+            except OSError:
+                result["cron_d_files"] = []
+        executable = Path(FIXED_COMMANDS["systemctl_timers"][0])
+        if executable.exists():
+            result["timers_supported"] = True
+            result["timers"] = self._run_fixed("systemctl_timers", 10, 131072).splitlines()[:100]
+        return result
+
+    def login_audit(self, limit: int = 30) -> dict[str, Any]:
+        if not 1 <= limit <= 200:
+            raise ValueError("limit out of range")
+        executable = Path(FIXED_COMMANDS["last"][0])
+        if not executable.exists():
+            return {"supported": False, "reason": "last unavailable", "records": []}
+        output = self._run_argv((*FIXED_COMMANDS["last"], str(limit)), 10, 131072)
+        return {"supported": True, "records": output.splitlines()[:limit]}
+
+    def kernel_log_query(self, lines: int = 80) -> dict[str, Any]:
+        if not 1 <= lines <= 500:
+            raise ValueError("line limit out of range")
+        executable = Path(FIXED_COMMANDS["journalctl_kernel"][0])
+        if not executable.exists():
+            return {"supported": False, "reason": "journalctl unavailable", "lines": []}
+        argv = (*FIXED_COMMANDS["journalctl_kernel"], "-p", "warning", "-n", str(lines))
+        output = self._run_argv(argv, 15, 262144)
+        return {"supported": True, "lines": output.splitlines()[:lines]}
 
     def security_baseline_scan(self) -> dict[str, Any]:
         checks: list[dict[str, Any]] = [
@@ -420,6 +560,18 @@ class ReadOnlyProvider:
         if service not in self.allowed_services:
             raise ValueError("SERVICE_NOT_ALLOWED")
 
+    @staticmethod
+    def _read_limited_lines(path: Path, *, limit: int) -> list[str]:
+        lines: list[str] = []
+        try:
+            with path.open("r", encoding="utf-8", errors="replace") as handle:
+                for _, line in zip(range(limit), handle, strict=False):
+                    cleaned = redact_text(line.rstrip("\n\r"))
+                    lines.append(cleaned[:1000])
+        except OSError:
+            return []
+        return lines
+
 
 class DemoProvider(ReadOnlyProvider):
     def capability_probe(self) -> dict[str, Any]:
@@ -447,6 +599,27 @@ class DemoProvider(ReadOnlyProvider):
                 {"pid": 202, "name": "demo-zombie", "state": "Z"},
             ][:limit]
         }
+
+    def memory_snapshot(self) -> dict[str, Any]:
+        return {"supported": True, "total": 16_000_000_000, "available": 9_000_000_000, "used": 7_000_000_000, "swap_total": 4_000_000_000, "swap_free": 3_500_000_000, "raw_keys": {}}
+
+    def filesystem_inventory(self) -> dict[str, Any]:
+        return {"supported": True, "mounts": [{"device": "/dev/demo-root", "mount_point": "/", "fs_type": "ext4", "total": 100_000, "used": 82_000, "free": 18_000}]}
+
+    def network_config_snapshot(self) -> dict[str, Any]:
+        return {"supported": True, "routes": ["default via 192.0.2.1 dev eth0"], "addresses": ["eth0 inet 192.0.2.10/24"], "dns": ["nameserver 192.0.2.53"]}
+
+    def package_inventory(self, limit: int = 200) -> dict[str, Any]:
+        return {"supported": True, "packages": ["kernel 6.6-demo loongarch64", "nginx 1.24-demo loongarch64"][:limit], "total_visible": 2}
+
+    def scheduled_task_inventory(self) -> dict[str, Any]:
+        return {"crontab": [], "cron_d_files": ["demo-maintenance"], "timers_supported": True, "timers": ["demo.timer loaded active waiting"]}
+
+    def login_audit(self, limit: int = 30) -> dict[str, Any]:
+        return {"supported": True, "records": ["admin pts/0 192.0.2.20 Tue Jul 14 10:00 still logged in"][:limit]}
+
+    def kernel_log_query(self, lines: int = 80) -> dict[str, Any]:
+        return {"supported": True, "lines": ["demo-kernel: no recent warning"][:lines]}
 
 
 def redact_text(value: str) -> str:

@@ -1,5 +1,14 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 常见运维场景 MCP 覆盖扩展
+
+- 在不引入通用 Shell、不放宽写权限的前提下，MCP 只读工具从 14 个扩展到 21 个，新增 `memory_snapshot`、`filesystem_inventory`、`network_config_snapshot`、`package_inventory`、`scheduled_task_inventory`、`login_audit`、`kernel_log_query`。
+- 新增场景覆盖内存/Swap、挂载点与 inode、路由/网卡/DNS、RPM 软件包、cron/systemd timer、最近登录审计、内核 warning 日志；所有输出继续脱敏、截断并标记为 `UNTRUSTED_DATA`。
+- 规则降级规划已支持中文自然语言路由：内存、文件系统/inode、DNS/路由、软件包、计划任务、登录审计、内核告警等问题会命中对应 MCP Tool；LLM 仍只能选择注册工具，不能直接执行命令。
+- `mcp_server/registry.py` 和 `backend/app/agent/planning.py` 已清理历史乱码，MCP 工具标题、描述和规则兜底摘要恢复为正常中文。
+- 写操作边界未变化：删除、重启、配置更新、进程终止等仍必须走 `CONTROLLED_EXECUTION`、dry-run、人工审批、备份、执行后验证和审计。
+- 本轮真实回归：针对性 23 项测试通过；全量 `pytest -q` 116 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过。
+
 ## 2026-07-14 用户低风险目录扫描默认开启
 
 - 按用户要求，`user_home_scan_enabled` 默认值已从 `false` 改为 `true`；`.env.example` 与 `config/app.example.yaml` 同步改为 `KYLIN_GUARD_USER_HOME_SCAN_ENABLED=true` / `user_home_scan_enabled: true`。

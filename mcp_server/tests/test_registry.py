@@ -9,9 +9,20 @@ from mcp_server.registry import ToolRegistry
 
 def test_registry_contains_only_read_only_tools() -> None:
     tools = ToolRegistry.for_mode("READ_ONLY").list_tools()
-    assert len(tools) == 14
+    assert len(tools) == 21
     assert all(tool.read_only for tool in tools)
-    assert {tool.name for tool in tools} >= {"system_snapshot", "process_list", "service_status"}
+    assert {tool.name for tool in tools} >= {
+        "system_snapshot",
+        "process_list",
+        "service_status",
+        "memory_snapshot",
+        "filesystem_inventory",
+        "network_config_snapshot",
+        "package_inventory",
+        "scheduled_task_inventory",
+        "login_audit",
+        "kernel_log_query",
+    }
 
 
 def test_demo_provider_is_repeatable_and_labeled() -> None:
@@ -83,6 +94,21 @@ def test_parameter_validation_and_missing_capability() -> None:
         provider.port_owner_lookup(70000)
     result = provider.io_diagnose()
     assert "supported" in result
+    assert "supported" in provider.memory_snapshot()
+    assert "mounts" in provider.filesystem_inventory()
+    assert "dns" in provider.network_config_snapshot()
+
+
+def test_new_inventory_tools_are_bounded_and_read_only() -> None:
+    provider = ReadOnlyProvider()
+    assert "packages" in provider.package_inventory(limit=5)
+    assert "timers" in provider.scheduled_task_inventory()
+    assert "records" in provider.login_audit(limit=5)
+    assert "lines" in provider.kernel_log_query(lines=5)
+    with pytest.raises(ValueError, match="limit out of range"):
+        provider.package_inventory(limit=0)
+    with pytest.raises(ValueError, match="line limit"):
+        provider.kernel_log_query(lines=1000)
 
 
 def test_service_and_journal_parameters_are_constrained() -> None:

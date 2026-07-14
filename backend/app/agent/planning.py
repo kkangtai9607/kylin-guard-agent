@@ -128,10 +128,24 @@ class Planner:
             return Intent.DIAGNOSIS, Complexity.MEDIUM, "service_status"
         if any(term in lower for term in ("磁盘", "disk", "空间")):
             return Intent.DIAGNOSIS, Complexity.MEDIUM, "disk_usage_scan"
+        if any(term in lower for term in ("内存", "memory", "swap", "oom")):
+            return Intent.DIAGNOSIS, Complexity.MEDIUM, "memory_snapshot"
+        if any(term in lower for term in ("挂载", "文件系统", "inode", "mount", "filesystem")):
+            return Intent.DIAGNOSIS, Complexity.MEDIUM, "filesystem_inventory"
         if any(term in lower for term in ("端口", "port", "socket")) and re.search(r"\b\d{1,5}\b", lower):
             return Intent.QUERY, Complexity.SIMPLE, "port_owner_lookup"
         if any(term in lower for term in ("端口", "port", "socket")):
             return Intent.QUERY, Complexity.SIMPLE, "network_socket_list"
+        if any(term in lower for term in ("路由", "网卡", "dns", "resolver", "route", "ip地址", "网络配置")):
+            return Intent.DIAGNOSIS, Complexity.MEDIUM, "network_config_snapshot"
+        if any(term in lower for term in ("软件包", "rpm", "依赖", "安装包", "package")):
+            return Intent.QUERY, Complexity.MEDIUM, "package_inventory"
+        if any(term in lower for term in ("计划任务", "定时任务", "crontab", "cron", "timer")):
+            return Intent.INSPECTION, Complexity.MEDIUM, "scheduled_task_inventory"
+        if any(term in lower for term in ("登录", "登陆", "login", "last", "用户活动")):
+            return Intent.INSPECTION, Complexity.MEDIUM, "login_audit"
+        if any(term in lower for term in ("内核", "kernel", "dmesg", "oops", "panic")):
+            return Intent.DIAGNOSIS, Complexity.MEDIUM, "kernel_log_query"
         if any(term in lower for term in ("进程", "process", "cpu", "僵尸")):
             return Intent.DIAGNOSIS, Complexity.MEDIUM, "process_list"
         return Intent.QUERY, Complexity.SIMPLE, "system_snapshot"
@@ -157,10 +171,7 @@ class Planner:
                 )
             )
         risk_level: Literal["L0", "L1", "L2", "L3", "L4"] = (
-            "L2"
-            if intent == Intent.CLEANUP
-            or any(step.tool_name in {"journal_query", "network_socket_list", "port_owner_lookup", "large_file_scan", "io_diagnose", "security_baseline_scan"} for step in steps)
-            else "L1"
+            "L2" if intent == Intent.CLEANUP or any(self._is_l2_tool(step.tool_name) for step in steps) else "L1"
         )
         return ActionPlan(
             plan_id=str(uuid.uuid4()),
@@ -178,6 +189,23 @@ class Planner:
         )
 
     @staticmethod
+    def _is_l2_tool(tool_name: str) -> bool:
+        return tool_name in {
+            "journal_query",
+            "network_socket_list",
+            "port_owner_lookup",
+            "large_file_scan",
+            "filesystem_inventory",
+            "network_config_snapshot",
+            "package_inventory",
+            "scheduled_task_inventory",
+            "login_audit",
+            "kernel_log_query",
+            "io_diagnose",
+            "security_baseline_scan",
+        }
+
+    @staticmethod
     def _default_arguments(goal: str, tool: str) -> dict[str, object]:
         lower = goal.lower()
         if tool == "service_status":
@@ -192,6 +220,10 @@ class Planner:
             return {"path": "__cleanup_roots__", "min_bytes": 10_000_000, "limit": 50}
         if tool == "disk_usage_scan":
             return {"path": "/"}
+        if tool in {"package_inventory", "login_audit"}:
+            return {"limit": 50}
+        if tool == "kernel_log_query":
+            return {"lines": 80}
         return {}
 
     @staticmethod

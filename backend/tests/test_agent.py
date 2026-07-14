@@ -70,6 +70,26 @@ def test_service_and_port_questions_get_concrete_arguments() -> None:
     assert port.steps[0].arguments == {"port": 8080}
 
 
+def test_common_ops_questions_route_to_dedicated_read_only_tools() -> None:
+    mcp = KylinGuardMCPClient(ToolRegistry.for_mode("DEMO"))
+    planner = Planner(UnavailableLLMProvider(), mcp)
+
+    cases = {
+        "分析内存和 swap 使用情况": "memory_snapshot",
+        "检查文件系统 inode 是否耗尽": "filesystem_inventory",
+        "查看 DNS 和默认路由配置": "network_config_snapshot",
+        "盘点当前安装的软件包版本": "package_inventory",
+        "检查系统计划任务和 timer": "scheduled_task_inventory",
+        "审计最近登录记录": "login_audit",
+        "查看内核有没有 panic 或 oops": "kernel_log_query",
+    }
+
+    for goal, tool in cases.items():
+        plan = planner.plan(goal)
+        assert plan.steps[0].tool_name == tool
+        assert plan.requires_approval is False
+
+
 def test_forbidden_input_never_calls_tool() -> None:
     mcp = KylinGuardMCPClient(ToolRegistry.for_mode("DEMO"))
     result = AgentOrchestrator(Planner(UnavailableLLMProvider(), mcp), mcp).run(
