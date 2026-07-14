@@ -23,13 +23,30 @@ FIXED_COMMANDS: dict[str, tuple[str, ...]] = {
 }
 
 
+def _default_allowed_roots() -> tuple[Path, ...]:
+    candidates = (
+        Path.cwd(),
+        Path("/var/log"),
+        Path("/tmp"),  # noqa: S108 - intentional read-only cleanup scan root.
+        Path("/var/tmp"),  # noqa: S108 - intentional read-only cleanup scan root.
+    )
+    roots: list[Path] = []
+    for path in candidates:
+        try:
+            if path.exists() and path.is_dir():
+                roots.append(path)
+        except OSError:
+            continue
+    return tuple(roots or (Path.cwd(),))
+
+
 class ReadOnlyProvider:
     def __init__(
         self,
-        allowed_roots: tuple[Path, ...] = (Path.cwd(),),
+        allowed_roots: tuple[Path, ...] | None = None,
         allowed_services: tuple[str, ...] = ("nginx", "sshd"),
     ) -> None:
-        self.allowed_roots = tuple(path.resolve() for path in allowed_roots)
+        self.allowed_roots = tuple(path.resolve() for path in (allowed_roots or _default_allowed_roots()))
         self.allowed_services = frozenset(allowed_services)
 
     def capability_probe(self) -> dict[str, Any]:
@@ -45,6 +62,20 @@ class ReadOnlyProvider:
 
     def system_snapshot(self) -> dict[str, Any]:
         disk = shutil.disk_usage(Path.cwd().anchor or ".")
+        filesystems = []
+        for root in self.allowed_roots:
+            try:
+                usage = shutil.disk_usage(root)
+                filesystems.append(
+                    {
+                        "path": str(root),
+                        "total": usage.total,
+                        "used": usage.used,
+                        "free": usage.free,
+                    }
+                )
+            except OSError:
+                continue
         return {
             "captured_at": time.time(),
             "hostname": platform.node(),
@@ -52,6 +83,7 @@ class ReadOnlyProvider:
             "cpu_count": os.cpu_count(),
             "load_average": list(os.getloadavg()) if hasattr(os, "getloadavg") else None,
             "disk": {"total": disk.total, "used": disk.used, "free": disk.free},
+            "filesystems": filesystems,
         }
 
     def process_list(self, limit: int = 100) -> dict[str, Any]:
@@ -110,7 +142,32 @@ class ReadOnlyProvider:
     def large_file_scan(
         self, path: str = ".", min_bytes: int = 10_000_000, limit: int = 100
     ) -> dict[str, Any]:
+        if path == "__cleanup_roots__":
+            matches: list[dict[str, Any]] = []
+            scanned_roots: list[str] = []
+            truncated = False
+            for target in self.allowed_roots:
+                if not target.exists() or not target.is_dir():
+                    continue
+                scanned_roots.append(str(target))
+                root_result = self._large_file_scan_one(target, min_bytes, max(1, limit - len(matches)))
+                matches.extend(root_result["files"])
+                truncated = truncated or root_result["truncated"]
+                if len(matches) >= limit:
+                    truncated = True
+                    break
+            return {
+                "path": path,
+                "scanned_roots": scanned_roots,
+                "files": matches[:limit],
+                "truncated": truncated,
+            }
         target = self._safe_path(path)
+        return self._large_file_scan_one(target, min_bytes, limit)
+
+    def _large_file_scan_one(
+        self, target: Path, min_bytes: int, limit: int
+    ) -> dict[str, Any]:
         matches: list[dict[str, Any]] = []
         for root, dirs, files in os.walk(target, followlinks=False):
             dirs[:] = [name for name in dirs if not (Path(root) / name).is_symlink()]
@@ -180,7 +237,77 @@ class ReadOnlyProvider:
         return {"supported": True, "raw": self._run_fixed("iostat", 10, 131072)}
 
     def security_baseline_scan(self) -> dict[str, Any]:
-        return {"checks": [{"id": "default_mode", "status": "PASS", "value": "READ_ONLY"}]}
+        checks: list[dict[str, Any]] = [
+            {"id": "fixed_tool_registry", "status": "PASS", "value": "no generic shell tool"},
+            {
+                "id": "procfs_available",
+                "status": "PASS" if Path("/proc").is_dir() else "SKIPPED",
+                "value": str(Path("/proc").is_dir()),
+            },
+            {
+                "id": "systemctl_available",
+                "status": "PASS" if Path(FIXED_COMMANDS["systemctl"][0]).exists() else "SKIPPED",
+                "value": FIXED_COMMANDS["systemctl"][0],
+            },
+            {
+                "id": "journalctl_available",
+                "status": "PASS" if Path(FIXED_COMMANDS["journalctl"][0]).exists() else "SKIPPED",
+                "value": FIXED_COMMANDS["journalctl"][0],
+            },
+        ]
+        checks.extend(self._service_baseline_checks())
+        checks.extend(self._network_baseline_checks())
+        checks.extend(self._zombie_baseline_checks())
+        return {"checks": checks}
+
+    def _service_baseline_checks(self) -> list[dict[str, Any]]:
+        checks: list[dict[str, Any]] = []
+        for service in sorted(self.allowed_services):
+            try:
+                status = self.service_status(service)
+                properties = status.get("properties")
+                active = str(properties.get("ActiveState", "unknown")) if isinstance(properties, dict) else "unsupported"
+                checks.append(
+                    {
+                        "id": f"service_{service}",
+                        "status": "PASS" if active == "active" else "WARN",
+                        "value": active,
+                    }
+                )
+            except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
+                checks.append({"id": f"service_{service}", "status": "SKIPPED", "value": "unavailable"})
+        return checks
+
+    def _network_baseline_checks(self) -> list[dict[str, Any]]:
+        try:
+            raw = str(self.network_socket_list().get("raw", ""))
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
+            return [{"id": "listening_ports", "status": "SKIPPED", "value": "ss/netstat unavailable"}]
+        suspicious = []
+        for line in raw.splitlines():
+            lowered = line.lower()
+            if any(token in lowered for token in ("0.0.0.0:", "[::]:", "*:")):
+                suspicious.append(line[:300])
+        return [
+            {
+                "id": "listening_ports",
+                "status": "WARN" if suspicious else "PASS",
+                "value": suspicious[:10],
+            }
+        ]
+
+    def _zombie_baseline_checks(self) -> list[dict[str, Any]]:
+        try:
+            zombies = self.zombie_process_scan().get("zombies", [])
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
+            return [{"id": "zombie_processes", "status": "SKIPPED", "value": "procfs unavailable"}]
+        return [
+            {
+                "id": "zombie_processes",
+                "status": "WARN" if zombies else "PASS",
+                "value": len(zombies) if isinstance(zombies, list) else 0,
+            }
+        ]
 
     def _safe_path(self, value: str) -> Path:
         target = Path(value).resolve(strict=True)

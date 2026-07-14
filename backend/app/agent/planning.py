@@ -189,7 +189,7 @@ class Planner:
             port = int(match.group(1)) if match else 80
             return {"port": max(1, min(65535, port))}
         if tool == "large_file_scan":
-            return {"path": ".", "min_bytes": 10_000_000, "limit": 50}
+            return {"path": "__cleanup_roots__", "min_bytes": 10_000_000, "limit": 50}
         return {}
 
     @staticmethod

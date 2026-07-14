@@ -8,11 +8,18 @@ app:
   controlled_execution:
     allowed_cleanup_roots:
       - /var/log/kylin-guard-managed
+      - /var/log
+      - /tmp
+      - /var/tmp
     protected_paths:
       - /etc
       - /root
       - /boot
       - /proc
+      - /sys
+      - /dev
+      - /run
+      - /var/lib
     backup_root: /var/lib/kylin-guard/backups
     minimum_age_days: 7
     minimum_size_bytes: 10000000

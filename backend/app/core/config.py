@@ -31,12 +31,21 @@ class ManagedProcessTarget(BaseModel):
 
 class ControlledExecutionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    allowed_cleanup_roots: tuple[Path, ...] = (Path("/var/log/kylin-guard-managed"),)
+    allowed_cleanup_roots: tuple[Path, ...] = (
+        Path("/var/log/kylin-guard-managed"),
+        Path("/var/log"),
+        Path("/tmp"),  # noqa: S108 - intentional controlled cleanup scan root.
+        Path("/var/tmp"),  # noqa: S108 - intentional controlled cleanup scan root.
+    )
     protected_paths: tuple[Path, ...] = (
         Path("/etc"),
         Path("/root"),
         Path("/boot"),
         Path("/proc"),
+        Path("/sys"),
+        Path("/dev"),
+        Path("/run"),
+        Path("/var/lib"),
     )
     backup_root: Path = Path("/var/lib/kylin-guard/backups")
     minimum_age_days: int = Field(default=7, ge=1, le=3650)

@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 受控执行型运维 Agent 方向优化
+
+- 已按“受控执行型运维 Agent”方向收敛前端信息架构：移除“安全演示闭环”菜单与路由入口，保留智能运维对话、受控操作台、安全审批中心、任务时间线、MCP 工具、安全巡检、事件、漂移、知识库和审计等真实运维入口。
+- 清理分析从单一工作目录升级为受控清理根集合：默认只读扫描实际存在的 `Path.cwd()`、`/var/log`、`/tmp`、`/var/tmp`；真正生产清理配置同步加入 `/var/log/kylin-guard-managed`、`/var/log`、`/tmp`、`/var/tmp`，同时继续保护 `/etc`、`/root`、`/boot`、`/proc`、`/sys`、`/dev`、`/run`、`/var/lib`。`/tmp` 与 `/var/tmp` 仅作为受控候选扫描根，已在代码中显式标注 ruff S108 豁免原因。
+- 智能运维对话中的清理候选表新增“申请清理”入口；在 `CONTROLLED_EXECUTION` 下，用户可从候选直接发起 `safe_log_cleanup` dry-run 与审批申请，并在同一任务页查看审批状态、领取已批准的一次性令牌并执行。READ_ONLY 下仍只分析不删除。
+- 安全巡检从单点快照增强为多项只读基线：系统快照增加受控目录磁盘用量列表，基线检查包括固定工具注册、procfs、systemctl、journalctl、白名单服务状态、监听端口暴露线索和僵尸进程；事件派生会根据多目录磁盘阈值和基线 WARN 生成 Incident。
+- 本轮真实回归：针对性 16 项测试通过；全量 `pytest -q` 112 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过；前端 `npm run type-check` 与 `npm run build` 通过。Vite 仍仅提示 Element Plus chunk 大小警告，不影响当前验收。
+
 ## 2026-07-14 LLM 接入说明与 SSH 服务意图修复
 
 - 针对“询问 ssh 服务有没有开启却回答 nginx 当前未发现异常”的反馈，已修复离线/不可用 LLM 兜底规划：`ssh`、`sshd` 和服务类问题会进入 `service_status` 路由，其中 SSH 统一规范化为 `sshd`，并追加 `journal_query(unit=sshd)` 采集最近日志，不再默认套用 nginx。

@@ -127,6 +127,40 @@
               <el-button size="small" @click="openJson('清理候选详情', scope.row)">查看</el-button>
             </template>
           </el-table-column>
+          <el-table-column label="受控操作" width="150">
+            <template #default="scope">
+              <el-button
+                size="small"
+                type="primary"
+                :disabled="session.mode !== 'CONTROLLED_EXECUTION' || !scope.row.eligible"
+                @click="requestCleanup(scope.row.candidate)"
+              >
+                申请清理
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
+
+      <section v-if="approvals.length" class="panel">
+        <div class="panel-head">
+          <div>
+            <h3>本任务审批与执行</h3>
+            <p>审批通过后由原申请人领取一次性令牌并执行；令牌绑定任务、工具和参数哈希。</p>
+          </div>
+        </div>
+        <el-table :data="approvals">
+          <el-table-column prop="tool_name" label="工具" width="180" />
+          <el-table-column prop="risk_level" label="风险" width="90" />
+          <el-table-column prop="status" label="状态" width="120" />
+          <el-table-column label="参数">
+            <template #default="scope">{{ formatArgs(scope.row.arguments_summary) }}</template>
+          </el-table-column>
+          <el-table-column label="执行" width="130">
+            <template #default="scope">
+              <el-button size="small" type="success" :disabled="scope.row.status !== 'APPROVED'" @click="executeApproved(scope.row)">执行</el-button>
+            </template>
+          </el-table-column>
         </el-table>
       </section>
 
@@ -260,7 +294,7 @@ interface AgentResult {
   root_causes: RootCause[];
   cleanup_analysis: CleanupDecision[];
 }
-interface Approval { id: string; task_id: string; tool_name: string; status: string; arguments_summary: Record<string, string> }
+interface Approval { id: string; task_id: string; tool_name: string; risk_level: string; status: string; arguments_summary: Record<string, string> }
 interface Claimed { approval_token: string }
 
 const session = useSession();

@@ -9,6 +9,7 @@ def test_cleanup_intent_is_deterministic_read_only_analysis() -> None:
     plan = Planner(UnavailableLLMProvider(), mcp).plan("请帮我清理系统垃圾和旧日志")
     assert plan.intent.value == "CLEANUP"
     assert plan.steps[0].tool_name == "large_file_scan"
+    assert plan.steps[0].arguments["path"] == "__cleanup_roots__"
     assert plan.requires_approval is False
     assert plan.risk_level == "L2"
 

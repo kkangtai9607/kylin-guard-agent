@@ -67,15 +67,30 @@ def _derive_incidents(
             elif ratio >= 0.8:
                 findings.append(("WARNING", f"磁盘使用率达到 {ratio:.1%}"))
 
+    filesystems = snapshot_data.get("filesystems")
+    if isinstance(filesystems, list):
+        for item in filesystems[:20]:
+            if not isinstance(item, dict):
+                continue
+            total = item.get("total")
+            used = item.get("used")
+            path = str(item.get("path", "unknown"))
+            if isinstance(total, (int, float)) and isinstance(used, (int, float)) and total > 0:
+                ratio = used / total
+                if ratio >= 0.9:
+                    findings.append(("CRITICAL", f"{path} 磁盘使用率达到 {ratio:.1%}"))
+                elif ratio >= 0.8:
+                    findings.append(("WARNING", f"{path} 磁盘使用率达到 {ratio:.1%}"))
+
     checks = baseline_data.get("checks")
     if isinstance(checks, list):
-        failed = [
-            item.get("id", "unknown")
-            for item in checks
-            if isinstance(item, dict) and item.get("status") not in {"PASS", "SKIPPED"}
-        ]
-        if failed:
-            findings.append(("WARNING", f"安全基线异常：{', '.join(map(str, failed[:5]))}"))
+        for item in checks[:50]:
+            if not isinstance(item, dict) or item.get("status") in {"PASS", "SKIPPED"}:
+                continue
+            check_id = str(item.get("id", "unknown"))
+            value = str(item.get("value", ""))[:200]
+            severity = "CRITICAL" if check_id.startswith("service_") else "WARNING"
+            findings.append((severity, f"安全巡检异常：{check_id}={value}"))
 
     created: list[Incident] = []
     for severity, summary in findings:

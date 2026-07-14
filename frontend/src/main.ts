@@ -7,6 +7,5 @@ import router from "./router";
 import "./styles.css";
 import "./button-theme.css";
 import "./task-workflow.css";
-import "./demo-workflow.css";
 
 createApp(App).use(createPinia()).use(router).use(ElementPlus).mount("#app");
