@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 LoongArch rpds 1.1.1 继续收敛
+
+- 官方麒麟 LoongArch VM 新错误显示 `rpds-py==0.27.1` 的源码构建会下载 Rust crate `rpds v1.1.1`，该 crate 同样要求 Cargo `edition2024`，目标机 Cargo 1.82.0 无法解析，导致 `metadata-generation-failed`。
+- 已将运行依赖继续收敛为 `rpds-py>=0.24,<0.25`，当前部署导出锁定为 `rpds-py==0.24.0`；该版本位于 `rpds v1.1.1` 之前，用于避开 LoongArch 源码构建时的 `edition2024` 链路。`jsonschema` 随约束回落到 `4.25.1`，仍满足 MCP SDK 依赖要求。
+- 部署 requirements 继续剥离未使用的 `cryptography/cffi/pycparser`，`deploy/install.sh` 继续使用 `pip install --no-deps --require-hashes`，`deploy/build-constraints.txt` 继续约束构建后端 `maturin==1.9.4`。
+- 本轮真实回归：`uv run pytest -q` 110 项通过；`uv run ruff check backend mcp_server scripts` 通过；`uv run mypy backend mcp_server` 通过（88 个源文件）；`uv run python scripts/security_scan.py` 通过（196 个文本/源码文件）；`uv run python scripts/validate_phase0.py` 通过；干净 Python 3.11 部署 requirements 冒烟通过，可导入 `FastMCP`、后端 app 并列出 14 个 Tool。
+- 该修复只影响 LoongArch 源码构建依赖收敛，不改变默认 `READ_ONLY`、安全护栏、审批、审计、MCP Tool 行为或生产受控执行边界；LoongArch 官方 VM 仍需以用户重新拉取后的安装结果为准。
+
 ## 2026-07-14 LoongArch rpds-py 规避 archery 1.2.2
 
 - 官方麒麟 LoongArch VM 继续在 `archery 1.2.2` 处失败，经源码检查确认来源为 `rpds-py`：`rpds-py>=0.28.0` 的 `Cargo.lock` 引入 `archery 1.2.2`，而该 crate 要求 Cargo `edition2024`。
