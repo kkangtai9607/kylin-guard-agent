@@ -8,6 +8,25 @@ if [[ $(id -u) -ne 0 ]]; then echo "install requires root" >&2; exit 1; fi
 architecture=$(uname -m)
 case "$architecture" in x86_64|aarch64|loongarch64) ;; *) echo "unsupported architecture: $architecture" >&2; exit 1;; esac
 if [[ ! -f /etc/os-release ]]; then echo "missing /etc/os-release" >&2; exit 1; fi
+python_include=$(python3 - <<'PY'
+import sysconfig
+print(sysconfig.get_paths().get("include", ""))
+PY
+)
+if [[ ! -f "$python_include/Python.h" ]]; then
+  echo "missing Python development headers: $python_include/Python.h" >&2
+  echo "Install build dependencies first, for example:" >&2
+  echo "  yum install -y python3-devel gcc make libffi-devel openssl-devel rust cargo" >&2
+  exit 1
+fi
+if ! command -v gcc >/dev/null 2>&1; then
+  echo "missing gcc; install build dependencies first: yum install -y gcc make" >&2
+  exit 1
+fi
+if ! ldconfig -p 2>/dev/null | grep -q libffi && ! pkg-config --exists libffi 2>/dev/null; then
+  echo "libffi development files may be missing; install: yum install -y libffi-devel" >&2
+  exit 1
+fi
 
 getent group kylin-guard >/dev/null || groupadd --system kylin-guard
 id kylin-guard >/dev/null 2>&1 || useradd --system --gid kylin-guard --home "$APP_ROOT" --shell /usr/sbin/nologin kylin-guard
