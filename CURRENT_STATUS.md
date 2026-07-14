@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 LoongArch Rust 依赖继续收敛
+
+- 官方麒麟 LoongArch VM 继续在 `archery 1.2.2` 处失败，说明 `cryptography==42.0.8` 源码构建仍会触发不兼容 Cargo 1.82.0 的 Rust crate。
+- 已将部署依赖进一步收敛到 `cryptography==38.0.4`、`cffi==1.17.1`，继续保持 `mcp==1.28.1` 与 `pydantic-core==2.33.2`；该项目自身认证会话不依赖 JWT/cryptography 功能，cryptography 仅由 MCP SDK 的 `pyjwt[crypto]` 链路引入。
+- 本轮真实回归：`uv run pytest -q` 110 项通过（仅 Starlette TestClient 第三方弃用警告）；`uv run ruff check backend mcp_server scripts`、`uv run mypy backend mcp_server`、`uv run python scripts/security_scan.py`、`uv run python scripts/validate_phase0.py` 均通过。
+- 若 LoongArch 仍在 cryptography 源码构建失败，下一步应改为部署专用 requirements 彻底剥离 MCP 未使用的 JWT crypto 依赖或准备离线 wheelhouse，而不是默认升级系统 Rust。
+
 ## 2026-07-14 LoongArch cryptography 构建兼容修复
 
 - 官方麒麟 LoongArch VM 第三轮安装失败定位为 `cryptography==49.0.0` 源码构建链引入 `archery 1.2.2`，该 Rust crate 同样要求 Cargo `edition2024`，目标机 Cargo 1.82.0 无法解析，导致 `metadata-generation-failed`。
