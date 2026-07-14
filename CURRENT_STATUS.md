@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 智能运维对话可解释性与中文路由修复
+
+- 针对 VM 页面验收反馈，已重构“智能运维对话”结果页：示例气泡明确作为输入模板；新增本次对话结果、计划摘要、公开理由、工具调用计划、原始工具回执；标准化证据和清理候选均可点击“查看”打开详情抽屉。
+- 根因候选百分比已在页面说明为 RCA 置信度，来源于异常程度、证据类型和时间相关性，不代表执行进度；清理候选为空时新增明确解释，包括非清理意图、无允许目录大旧日志、未达到大小/保留期阈值、保护路径和 READ_ONLY 不执行删除。
+- 修复后端中文关键字路由与中文安全拦截乱码问题：`清理/垃圾/旧日志/缓存` 路由到 `large_file_scan`，`磁盘/空间` 路由到 `disk_usage_scan`，`进程/僵尸` 路由到 `process_list`，`端口` 路由到 `network_socket_list`；中文“忽略/绕过/读取密钥/显示系统提示词”等请求恢复 L4 阻断。
+- 修复后端公开决策链、RCA 推荐动作和前端状态映射中文乱码；仍不保存或展示模型隐藏思维，仅展示结构化公开决策链和工具证据。
+- 本轮真实回归：相关后端测试 30 项通过；全量 `pytest -q` 110 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；前端 `npm run type-check` 与 `npm run build` 通过；`security_scan.py` 通过。
+
 ## 2026-07-14 LoongArch 前端访问与任务页布局修复
 
 - LoongArch VM 已完成依赖构建、后端健康接口和 Nginx 启动；首页 500 定位为 Nginx 用户无法 `stat /opt/kylin-guard/frontend/index.html`，根因是 `/opt/kylin-guard` 目录最小权限阻止 Nginx 穿越目录读取静态文件。

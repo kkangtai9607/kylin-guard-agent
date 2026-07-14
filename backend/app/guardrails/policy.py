@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import re
 import unicodedata
 from collections.abc import Mapping
@@ -109,6 +110,4 @@ class PathGuard:
 
 
 def canonical_arguments(arguments: Mapping[str, Any]) -> str:
-    import json
-
     return json.dumps(arguments, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

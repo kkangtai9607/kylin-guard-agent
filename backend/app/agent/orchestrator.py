@@ -39,7 +39,7 @@ class AgentOrchestrator:
                     {
                         "stage": "输入护栏",
                         "reason_code": "FORBIDDEN_INPUT",
-                        "summary": "请求被确定性安全规则阻断，未调用系统工具",
+                        "summary": "请求被确定性安全规则阻断，未调用系统工具。",
                     },
                 ],
             }
