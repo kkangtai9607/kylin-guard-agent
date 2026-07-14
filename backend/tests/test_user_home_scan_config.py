@@ -3,9 +3,9 @@ from pathlib import Path
 from backend.app.core.config import AppConfig, user_home_scan_roots
 
 
-def test_user_home_scan_is_disabled_by_default() -> None:
+def test_user_home_scan_is_enabled_by_default_without_scanning_whole_home() -> None:
     config = AppConfig()
-    assert not config.user_home_scan_enabled
+    assert config.user_home_scan_enabled
     assert all("/home/" not in str(path) for path in config.read_only_scan_roots())
     assert all("/home/" not in str(path) for path in config.controlled_cleanup_roots())
 

@@ -1,19 +1,26 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 用户低风险目录扫描默认开启
+
+- 按用户要求，`user_home_scan_enabled` 默认值已从 `false` 改为 `true`；`.env.example` 与 `config/app.example.yaml` 同步改为 `KYLIN_GUARD_USER_HOME_SCAN_ENABLED=true` / `user_home_scan_enabled: true`。
+- 安全边界保持不变：默认开启只会纳入实际存在的 `/home/<user>/.cache`、`/home/<user>/Downloads`、`/home/<user>/tmp`，不会扫描整个 `/home`，也不会纳入 `.ssh`、`.gnupg`、keyrings 等敏感目录；LLM 和普通对话仍不能临时扩大扫描范围。
+- 删除边界未放宽：READ_ONLY 仍只分析和展示候选；真正删除仍必须在 `CONTROLLED_EXECUTION` 下经过 dry-run、人工审批、备份、执行后验证和审计。
+- 本轮真实回归：针对性 15 项测试通过；全量 `pytest -q` 114 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过。
+
 ## 2026-07-14 系统级只读磁盘诊断与清理边界拆分
 
 - 针对“分析磁盘占用只扫描 `/opt/kylin-guard`”的问题，已将规则降级计划中的 `disk_usage_scan` 默认参数改为 `path="/"`；READ_ONLY 下磁盘容量诊断默认面向系统根文件系统，而不是服务工作目录。
-- MCP 读范围与清理候选范围已拆分：`allowed_roots` 可包含 `/` 以支持系统级只读容量/元数据诊断；`cleanup_roots` 独立用于 `large_file_scan("__cleanup_roots__")` 和清理候选分类，默认仍只覆盖受控清理根、日志/临时目录和显式开启的用户低风险目录。
+- MCP 读范围与清理候选范围已拆分：`allowed_roots` 可包含 `/` 以支持系统级只读容量/元数据诊断；`cleanup_roots` 独立用于 `large_file_scan("__cleanup_roots__")` 和清理候选分类，默认仍只覆盖受控清理根、日志/临时目录和用户低风险目录。
 - 只读根扩大后同步加入 protected path 防护，`/etc/shadow`、`/etc/gshadow`、`/root`、`/boot`、`/proc`、`/sys`、`/dev`、`/run`、`/var/lib` 等路径不会因位于 `/` 下而被显式文件查询或进入清理候选。
 - 删除等状态变更边界未放宽：READ_ONLY 只诊断和展示候选；真正删除仍必须在 `CONTROLLED_EXECUTION` 下走 dry-run、人工审批、备份、执行后验证和审计。
 - 本轮真实回归：针对性 32 项测试通过；全量 `pytest -q` 114 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过。
 
 ## 2026-07-14 用户目录低风险扫描开关
 
-- 新增受信任配置开关 `user_home_scan_enabled`，默认 `false`；`.env.example` 同步提供 `KYLIN_GUARD_USER_HOME_SCAN_ENABLED=false`。该开关只能由管理员通过部署配置或 Secret 环境显式开启，LLM 和普通对话不能临时扩大扫描范围。
+- 用户低风险目录扫描开关 `user_home_scan_enabled` 已改为默认 `true`；`.env.example` 同步提供 `KYLIN_GUARD_USER_HOME_SCAN_ENABLED=true`。该开关仍只能由部署配置或 Secret 环境关闭/开启，LLM 和普通对话不能临时扩大扫描范围。
 - 开启后只扩展实际存在的 `/home/<user>/.cache`、`/home/<user>/Downloads`、`/home/<user>/tmp`，不会扫描整个 `/home`，也不会纳入 `.ssh`、`.gnupg`、`.config`、keyrings 等敏感目录；子目录配置拒绝绝对路径和 `..` 穿越。
 - MCP 只读扫描和生产受控清理共用同一套服务端根目录扩展逻辑：`read_only_scan_roots()` 供 MCP Provider 使用，`controlled_cleanup_roots()` 供生产 `safe_log_cleanup` 使用，保持“能发现”和“可受控清理”的边界一致。
-- 新增 `backend/tests/test_user_home_scan_config.py`，覆盖默认关闭、开启后只纳入低风险既有子目录、不会纳入 `.ssh` 以及拒绝 `../escape` 配置。
+- `backend/tests/test_user_home_scan_config.py` 覆盖默认开启、不扫描整个 `/home`、只纳入低风险既有子目录、不会纳入 `.ssh` 以及拒绝 `../escape` 配置。
 - 本轮真实回归：针对性 14 项测试通过；全量 `pytest -q` 114 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过。
 
 ## 2026-07-14 受控执行型运维 Agent 方向优化
