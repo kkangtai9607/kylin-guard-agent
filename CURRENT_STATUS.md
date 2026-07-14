@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 智能运维对话结论闭环修复
+
+- 针对 VM 页面验收反馈，已将“智能运维对话”从内部字段展示改为面向运维人员的问答式闭环：页面顶部先显示 `Agent 结论`，包括正常/关注/异常等级、直接回答、关键发现和建议动作，再展示工具计划、清理候选、根因、决策链、标准化证据和原始工具回执。
+- 后端新增 `diagnosis` 结构化结果：磁盘类问题直接说明扫描路径、使用率和可用空间；清理类问题说明发现的大文件数量、可安全清理候选数量及未入选原因；服务类问题直接判断 `active/failed/inactive/unknown`；CPU/进程类问题列出按累计 CPU ticks 排序的进程线索；端口类问题返回端口监听匹配数；L4 请求明确显示“已阻断且未调用工具”。
+- 修复中文路由优先级和默认参数：`nginx` 服务问题默认调用 `service_status(service=nginx)` 并追加 `journal_query(unit=nginx)`；`8080 端口由哪个进程占用` 优先路由到 `port_owner_lookup(port=8080)`；清理类问题调用 `large_file_scan(path=., min_bytes=10000000, limit=50)`；工具参数为空时页面显示“无需参数”。
+- `process_list` 在 Linux `/proc` 只读路径中补充 `cpu_ticks` 和 `rss_pages`，按累计 CPU ticks 排序，避免 CPU 类问题只显示抽象百分比。该实现不调用任意 Shell，不引入 `shell=True`，不改变 READ_ONLY 默认安全边界。
+- 本轮真实回归：`pytest -q` 111 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；前端 `npm run type-check` 与 `npm run build` 通过；`security_scan.py` 通过。Vite 仍仅提示 Element Plus chunk 大小警告，不影响功能。
+
 ## 2026-07-14 智能运维对话可解释性与中文路由修复
 
 - 针对 VM 页面验收反馈，已重构“智能运维对话”结果页：示例气泡明确作为输入模板；新增本次对话结果、计划摘要、公开理由、工具调用计划、原始工具回执；标准化证据和清理候选均可点击“查看”打开详情抽屉。

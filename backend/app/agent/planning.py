@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 from enum import Enum
 from typing import Literal
@@ -123,30 +124,72 @@ class Planner:
         lower = goal.lower()
         if any(term in lower for term in ("清理", "垃圾", "旧日志", "缓存", "cleanup")):
             return Intent.CLEANUP, Complexity.COMPLEX, "large_file_scan"
+        if any(term in lower for term in ("nginx", "服务", "service", "systemd")):
+            return Intent.DIAGNOSIS, Complexity.MEDIUM, "service_status"
         if any(term in lower for term in ("磁盘", "disk", "空间")):
             return Intent.DIAGNOSIS, Complexity.MEDIUM, "disk_usage_scan"
-        if any(term in lower for term in ("进程", "process", "cpu", "僵尸")):
-            return Intent.DIAGNOSIS, Complexity.MEDIUM, "process_list"
+        if any(term in lower for term in ("端口", "port", "socket")) and re.search(r"\b\d{1,5}\b", lower):
+            return Intent.QUERY, Complexity.SIMPLE, "port_owner_lookup"
         if any(term in lower for term in ("端口", "port", "socket")):
             return Intent.QUERY, Complexity.SIMPLE, "network_socket_list"
+        if any(term in lower for term in ("进程", "process", "cpu", "僵尸")):
+            return Intent.DIAGNOSIS, Complexity.MEDIUM, "process_list"
         return Intent.QUERY, Complexity.SIMPLE, "system_snapshot"
 
     def _rule_fallback(self, goal: str) -> ActionPlan:
         intent, complexity, tool = self.route(goal)
+        steps = [
+            PlanStep(
+                sequence=1,
+                tool_name=tool,
+                arguments=self._default_arguments(goal, tool),
+                purpose="采集只读系统证据",
+            )
+        ]
+        if tool == "service_status":
+            steps.append(
+                PlanStep(
+                    sequence=2,
+                    tool_name="journal_query",
+                    arguments={"unit": "nginx", "lines": 50},
+                    purpose="采集服务最近日志作为辅助证据",
+                )
+            )
+        risk_level: Literal["L0", "L1", "L2", "L3", "L4"] = (
+            "L2"
+            if intent == Intent.CLEANUP
+            or any(step.tool_name in {"journal_query", "network_socket_list", "port_owner_lookup", "large_file_scan", "io_diagnose", "security_baseline_scan"} for step in steps)
+            else "L1"
+        )
         return ActionPlan(
             plan_id=str(uuid.uuid4()),
             user_goal=goal,
             intent=intent,
             complexity=complexity,
             summary="规则降级生成的只读诊断计划",
-            steps=[PlanStep(sequence=1, tool_name=tool, purpose="采集只读系统证据")],
+            steps=steps,
             expected_evidence=[tool],
-            risk_level="L2" if intent == Intent.CLEANUP else "L1",
+            risk_level=risk_level,
             requires_approval=False,
             verification="校验工具返回结构和证据来源",
             rollback="只读计划不适用回滚",
             public_reason="LLM 当前不可用，已使用确定性只读路由采集系统证据。",
         )
+
+    @staticmethod
+    def _default_arguments(goal: str, tool: str) -> dict[str, object]:
+        lower = goal.lower()
+        if tool == "service_status":
+            return {"service": "nginx" if "nginx" in lower else "nginx"}
+        if tool == "journal_query":
+            return {"unit": "nginx", "lines": 50}
+        if tool == "port_owner_lookup":
+            match = re.search(r"\b(\d{1,5})\b", lower)
+            port = int(match.group(1)) if match else 80
+            return {"port": max(1, min(65535, port))}
+        if tool == "large_file_scan":
+            return {"path": ".", "min_bytes": 10_000_000, "limit": 50}
+        return {}
 
     @staticmethod
     def _forbidden(goal: str) -> ActionPlan:

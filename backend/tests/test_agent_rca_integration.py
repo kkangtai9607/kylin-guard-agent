@@ -27,6 +27,11 @@ def test_agent_automatically_normalizes_evidence_scores_rca_and_traces_decisions
     result = orchestrator.run("分析磁盘空间不足原因")
     assert result["status"] == "SUCCEEDED"
     assert result["normalized_evidence"]
+    assert result["diagnosis"]["headline"] in {
+        "磁盘空间未达到告警阈值",
+        "磁盘空间压力较高",
+    }
+    assert result["diagnosis"]["findings"]
     assert result["root_causes"][0]["title"] == "disk_pressure"
     assert result["knowledge_hits"][0]["review_status"] == "APPROVED"
     stages = [item["stage"] for item in result["decision_chain"]]
@@ -52,6 +57,7 @@ def test_forbidden_request_has_public_block_trace_and_no_evidence() -> None:
     )
     assert result["status"] == "BLOCKED"
     assert result["evidence"] == []
+    assert result["diagnosis"]["headline"] == "请求已被安全策略阻断"
     assert result["decision_chain"][-1]["reason_code"] == "FORBIDDEN_INPUT"
 
 

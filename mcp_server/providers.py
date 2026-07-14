@@ -58,15 +58,28 @@ class ReadOnlyProvider:
         if Path("/proc").is_dir():
             rows: list[dict[str, Any]] = []
             for item in sorted(Path("/proc").iterdir(), key=lambda path: path.name):
-                if not item.name.isdigit() or len(rows) >= limit:
+                if not item.name.isdigit():
                     continue
                 try:
                     name = (item / "comm").read_text(errors="replace").strip()
-                    state = (item / "stat").read_text(errors="replace").split()[2]
-                    rows.append({"pid": int(item.name), "name": name, "state": state})
-                except (OSError, IndexError):
+                    stat_text = (item / "stat").read_text(errors="replace")
+                    right = stat_text.rsplit(")", 1)[1].strip().split()
+                    state = right[0]
+                    cpu_ticks = int(right[11]) + int(right[12]) if len(right) > 12 else 0
+                    rss_pages = int(right[21]) if len(right) > 21 else 0
+                    rows.append(
+                        {
+                            "pid": int(item.name),
+                            "name": name,
+                            "state": state,
+                            "cpu_ticks": cpu_ticks,
+                            "rss_pages": rss_pages,
+                        }
+                    )
+                except (OSError, IndexError, ValueError):
                     continue
-            return {"processes": rows}
+            rows.sort(key=lambda row: int(row.get("cpu_ticks", 0)), reverse=True)
+            return {"processes": rows[:limit], "sort": "cpu_ticks_desc"}
         output = self._run_fixed("tasklist", timeout=10, max_bytes=131072)
         return {"raw": output}
 

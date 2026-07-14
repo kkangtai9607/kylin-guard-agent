@@ -52,6 +52,18 @@ def test_unavailable_llm_uses_repeatable_read_only_fallback() -> None:
     assert first.requires_approval is False
 
 
+def test_service_and_port_questions_get_concrete_arguments() -> None:
+    mcp = KylinGuardMCPClient(ToolRegistry.for_mode("DEMO"))
+    service = Planner(UnavailableLLMProvider(), mcp).plan("检查 nginx 服务为什么异常")
+    assert service.steps[0].tool_name == "service_status"
+    assert service.steps[0].arguments == {"service": "nginx"}
+    assert service.steps[1].tool_name == "journal_query"
+
+    port = Planner(UnavailableLLMProvider(), mcp).plan("检查 8080 端口由哪个进程占用")
+    assert port.steps[0].tool_name == "port_owner_lookup"
+    assert port.steps[0].arguments == {"port": 8080}
+
+
 def test_forbidden_input_never_calls_tool() -> None:
     mcp = KylinGuardMCPClient(ToolRegistry.for_mode("DEMO"))
     result = AgentOrchestrator(Planner(UnavailableLLMProvider(), mcp), mcp).run(
