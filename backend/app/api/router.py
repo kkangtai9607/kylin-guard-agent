@@ -1659,8 +1659,9 @@ def _cleanup_use_state(path: str) -> FileUseState:
 
 def _production_cleanup_executor() -> ControlledCleanupExecutor:
     config = get_config().controlled_execution
+    app_config = get_config()
     policy = CleanupPolicy(
-        allowed_roots=config.allowed_cleanup_roots,
+        allowed_roots=app_config.controlled_cleanup_roots(),
         protected_paths=config.protected_paths,
         minimum_age_days=config.minimum_age_days,
         minimum_size_bytes=config.minimum_size_bytes,

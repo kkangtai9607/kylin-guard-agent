@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 用户目录低风险扫描开关
+
+- 新增受信任配置开关 `user_home_scan_enabled`，默认 `false`；`.env.example` 同步提供 `KYLIN_GUARD_USER_HOME_SCAN_ENABLED=false`。该开关只能由管理员通过部署配置或 Secret 环境显式开启，LLM 和普通对话不能临时扩大扫描范围。
+- 开启后只扩展实际存在的 `/home/<user>/.cache`、`/home/<user>/Downloads`、`/home/<user>/tmp`，不会扫描整个 `/home`，也不会纳入 `.ssh`、`.gnupg`、`.config`、keyrings 等敏感目录；子目录配置拒绝绝对路径和 `..` 穿越。
+- MCP 只读扫描和生产受控清理共用同一套服务端根目录扩展逻辑：`read_only_scan_roots()` 供 MCP Provider 使用，`controlled_cleanup_roots()` 供生产 `safe_log_cleanup` 使用，保持“能发现”和“可受控清理”的边界一致。
+- 新增 `backend/tests/test_user_home_scan_config.py`，覆盖默认关闭、开启后只纳入低风险既有子目录、不会纳入 `.ssh` 以及拒绝 `../escape` 配置。
+- 本轮真实回归：针对性 14 项测试通过；全量 `pytest -q` 114 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过。
+
 ## 2026-07-14 受控执行型运维 Agent 方向优化
 
 - 已按“受控执行型运维 Agent”方向收敛前端信息架构：移除“安全演示闭环”菜单与路由入口，保留智能运维对话、受控操作台、安全审批中心、任务时间线、MCP 工具、安全巡检、事件、漂移、知识库和审计等真实运维入口。

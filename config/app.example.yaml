@@ -5,6 +5,10 @@ app:
   port: 8000
   log_level: INFO
   request_id_header: X-Request-ID
+  # 默认关闭用户目录扫描。管理员显式开启后，仅扫描 /home/<user> 下列低风险子目录；
+  # 不扫描整个 /home，也不会纳入 .ssh、.gnupg、keyrings 等敏感目录。
+  user_home_scan_enabled: false
+  user_home_scan_subdirs: [.cache, Downloads, tmp]
   controlled_execution:
     allowed_cleanup_roots:
       - /var/log/kylin-guard-managed

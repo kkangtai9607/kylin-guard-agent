@@ -12,7 +12,11 @@ class KylinGuardMCPClient:
     """Backend adapter; transport-backed sessions can replace the in-process registry."""
 
     def __init__(self, registry: ToolRegistry | None = None) -> None:
-        self.registry = registry or ToolRegistry.for_mode(get_config().mode)
+        config = get_config()
+        self.registry = registry or ToolRegistry.for_mode(
+            config.mode,
+            allowed_roots=config.read_only_scan_roots(),
+        )
 
     def health(self) -> dict[str, Any]:
         result = self.registry.call("capability_probe")

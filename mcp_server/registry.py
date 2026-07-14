@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from mcp_server.providers import DemoProvider, ReadOnlyProvider
@@ -45,8 +46,12 @@ class ToolRegistry:
         }
 
     @classmethod
-    def for_mode(cls, mode: str) -> ToolRegistry:
-        return cls(DemoProvider(), is_demo=True) if mode == "DEMO" else cls(ReadOnlyProvider())
+    def for_mode(cls, mode: str, allowed_roots: tuple[Path, ...] | None = None) -> ToolRegistry:
+        return (
+            cls(DemoProvider(), is_demo=True)
+            if mode == "DEMO"
+            else cls(ReadOnlyProvider(allowed_roots=allowed_roots))
+        )
 
     def list_tools(self) -> list[ToolMetadata]:
         return list(self._metadata.values())

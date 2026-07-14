@@ -66,6 +66,27 @@ class ControlledExecutionConfig(BaseModel):
     )
 
 
+def user_home_scan_roots(
+    *, enabled: bool, subdirs: tuple[str, ...], home_root: Path = Path("/home")
+) -> tuple[Path, ...]:
+    if not enabled or not home_root.is_dir():
+        return ()
+    roots: list[Path] = []
+    for user_dir in home_root.iterdir():
+        try:
+            if not user_dir.is_dir() or user_dir.is_symlink():
+                continue
+            for subdir in subdirs:
+                if subdir.startswith("/") or ".." in Path(subdir).parts:
+                    continue
+                target = user_dir / subdir
+                if target.is_dir() and not target.is_symlink():
+                    roots.append(target)
+        except OSError:
+            continue
+    return tuple(roots)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = "KylinGuard Agent"
@@ -73,7 +94,30 @@ class AppConfig(BaseModel):
     database: DatabaseConfig = DatabaseConfig()
     snapshot_scheduler_enabled: bool = False
     snapshot_interval_seconds: int = Field(default=300, ge=30, le=86400)
+    user_home_scan_enabled: bool = False
+    user_home_scan_subdirs: tuple[str, ...] = (".cache", "Downloads", "tmp")
     controlled_execution: ControlledExecutionConfig = ControlledExecutionConfig()
+
+    def read_only_scan_roots(self) -> tuple[Path, ...]:
+        return (
+            Path.cwd(),
+            Path("/var/log"),
+            Path("/tmp"),  # noqa: S108 - intentional read-only cleanup scan root.
+            Path("/var/tmp"),  # noqa: S108 - intentional read-only cleanup scan root.
+            *user_home_scan_roots(
+                enabled=self.user_home_scan_enabled,
+                subdirs=self.user_home_scan_subdirs,
+            ),
+        )
+
+    def controlled_cleanup_roots(self) -> tuple[Path, ...]:
+        return (
+            *self.controlled_execution.allowed_cleanup_roots,
+            *user_home_scan_roots(
+                enabled=self.user_home_scan_enabled,
+                subdirs=self.user_home_scan_subdirs,
+            ),
+        )
 
 
 class EnvironmentSettings(BaseSettings):
@@ -83,6 +127,7 @@ class EnvironmentSettings(BaseSettings):
     mode: Literal["DEMO", "READ_ONLY", "CONTROLLED_EXECUTION"] | None = None
     snapshot_scheduler_enabled: bool | None = None
     snapshot_interval_seconds: int | None = None
+    user_home_scan_enabled: bool | None = None
 
 
 def load_config(path: Path | None = None) -> AppConfig:
@@ -105,6 +150,8 @@ def load_config(path: Path | None = None) -> AppConfig:
         overrides["snapshot_scheduler_enabled"] = env.snapshot_scheduler_enabled
     if env.snapshot_interval_seconds is not None:
         overrides["snapshot_interval_seconds"] = env.snapshot_interval_seconds
+    if env.user_home_scan_enabled is not None:
+        overrides["user_home_scan_enabled"] = env.user_home_scan_enabled
     return config.model_copy(update=overrides)
 
 
