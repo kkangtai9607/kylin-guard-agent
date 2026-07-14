@@ -327,8 +327,6 @@ def mcp_tool_test(
     if tool_name == "service_status" and not arguments:
         arguments = {"service": "nginx"}
     result = KylinGuardMCPClient().call_tool(tool_name, arguments)
-    if result.status != "SUCCEEDED":
-        raise AppError(ErrorCode.VALIDATION_ERROR, "tool self-test failed", 422)
     return envelope(request, result.model_dump(mode="json"))
 
 

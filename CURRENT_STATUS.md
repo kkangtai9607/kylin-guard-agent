@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 MCP 工具自检错误展示修复
+
+- 针对页面点击 MCP 功能显示 `Internal Server Error` 的反馈，已调整 `/api/v1/mcp/tools/{tool_name}/test`：工具自检失败不再转换成 HTTP 422/500，而是以 HTTP 200 返回标准 `ToolResult`，由页面展示 `status=FAILED`、`error_code` 和 `warnings`。
+- 该修复用于区分“页面/接口异常”和“目标机缺少某个只读能力或工具参数不满足”，不会把失败伪装成成功，也不改变任何执行权限。
+- 写操作边界未变化：该接口仍只是 MCP 只读/自检入口，不新增通用 Shell，不执行状态变更。
+- 本轮真实回归：针对性 27 项测试通过；全量 `pytest -q` 117 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过。
+
 ## 2026-07-14 常见运维场景 MCP 覆盖扩展
 
 - 在不引入通用 Shell、不放宽写权限的前提下，MCP 只读工具从 14 个扩展到 21 个，新增 `memory_snapshot`、`filesystem_inventory`、`network_config_snapshot`、`package_inventory`、`scheduled_task_inventory`、`login_audit`、`kernel_log_query`。
