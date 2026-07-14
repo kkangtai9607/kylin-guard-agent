@@ -124,7 +124,7 @@ class Planner:
         lower = goal.lower()
         if any(term in lower for term in ("清理", "垃圾", "旧日志", "缓存", "cleanup")):
             return Intent.CLEANUP, Complexity.COMPLEX, "large_file_scan"
-        if any(term in lower for term in ("nginx", "服务", "service", "systemd")):
+        if any(term in lower for term in ("nginx", "ssh", "sshd", "服务", "service", "systemd")):
             return Intent.DIAGNOSIS, Complexity.MEDIUM, "service_status"
         if any(term in lower for term in ("磁盘", "disk", "空间")):
             return Intent.DIAGNOSIS, Complexity.MEDIUM, "disk_usage_scan"
@@ -147,11 +147,12 @@ class Planner:
             )
         ]
         if tool == "service_status":
+            service = self._service_name_from_goal(goal)
             steps.append(
                 PlanStep(
                     sequence=2,
                     tool_name="journal_query",
-                    arguments={"unit": "nginx", "lines": 50},
+                    arguments={"unit": service, "lines": 50},
                     purpose="采集服务最近日志作为辅助证据",
                 )
             )
@@ -180,9 +181,9 @@ class Planner:
     def _default_arguments(goal: str, tool: str) -> dict[str, object]:
         lower = goal.lower()
         if tool == "service_status":
-            return {"service": "nginx" if "nginx" in lower else "nginx"}
+            return {"service": Planner._service_name_from_goal(goal)}
         if tool == "journal_query":
-            return {"unit": "nginx", "lines": 50}
+            return {"unit": Planner._service_name_from_goal(goal), "lines": 50}
         if tool == "port_owner_lookup":
             match = re.search(r"\b(\d{1,5})\b", lower)
             port = int(match.group(1)) if match else 80
@@ -190,6 +191,15 @@ class Planner:
         if tool == "large_file_scan":
             return {"path": ".", "min_bytes": 10_000_000, "limit": 50}
         return {}
+
+    @staticmethod
+    def _service_name_from_goal(goal: str) -> str:
+        lower = goal.lower()
+        if re.search(r"(^|[^a-z0-9_])(ssh|sshd)([^a-z0-9_]|$)", lower):
+            return "sshd"
+        if "nginx" in lower:
+            return "nginx"
+        return "nginx"
 
     @staticmethod
     def _forbidden(goal: str) -> ActionPlan:

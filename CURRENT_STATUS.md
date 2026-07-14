@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 LLM 接入说明与 SSH 服务意图修复
+
+- 针对“询问 ssh 服务有没有开启却回答 nginx 当前未发现异常”的反馈，已修复离线/不可用 LLM 兜底规划：`ssh`、`sshd` 和服务类问题会进入 `service_status` 路由，其中 SSH 统一规范化为 `sshd`，并追加 `journal_query(unit=sshd)` 采集最近日志，不再默认套用 nginx。
+- 只读 MCP Provider 的默认服务查询白名单新增 `sshd`，用于 `READ_ONLY` 下安全查询 SSH 服务状态；生产受控写执行、sudoers、固定执行代理和 `service_restart` 白名单仍保持 nginx-only，未扩大任何写权限。
+- 前端智能运维对话示例新增“ssh 服务有没有开启”，便于在官方 VM 页面直接复现；DeepSeek/OpenAI-compatible Provider 仍通过环境变量接入，未把任何 API Key 写入仓库。
+- 本轮真实回归：`pytest -q` 112 项通过；`ruff check backend mcp_server scripts` 通过；`mypy backend mcp_server` 通过；`security_scan.py` 通过；前端 `npm run type-check` 与 `npm run build` 通过。Vite 仍仅提示 Element Plus chunk 大小警告，不影响功能。
+
 ## 2026-07-14 智能运维对话结论闭环修复
 
 - 针对 VM 页面验收反馈，已将“智能运维对话”从内部字段展示改为面向运维人员的问答式闭环：页面顶部先显示 `Agent 结论`，包括正常/关注/异常等级、直接回答、关键发现和建议动作，再展示工具计划、清理候选、根因、决策链、标准化证据和原始工具回执。

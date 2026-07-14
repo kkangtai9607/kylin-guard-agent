@@ -59,6 +59,11 @@ def test_service_and_port_questions_get_concrete_arguments() -> None:
     assert service.steps[0].arguments == {"service": "nginx"}
     assert service.steps[1].tool_name == "journal_query"
 
+    ssh = Planner(UnavailableLLMProvider(), mcp).plan("ssh 服务有没有开启")
+    assert ssh.steps[0].tool_name == "service_status"
+    assert ssh.steps[0].arguments == {"service": "sshd"}
+    assert ssh.steps[1].arguments == {"unit": "sshd", "lines": 50}
+
     port = Planner(UnavailableLLMProvider(), mcp).plan("检查 8080 端口由哪个进程占用")
     assert port.steps[0].tool_name == "port_owner_lookup"
     assert port.steps[0].arguments == {"port": 8080}

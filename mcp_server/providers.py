@@ -27,7 +27,7 @@ class ReadOnlyProvider:
     def __init__(
         self,
         allowed_roots: tuple[Path, ...] = (Path.cwd(),),
-        allowed_services: tuple[str, ...] = ("nginx",),
+        allowed_services: tuple[str, ...] = ("nginx", "sshd"),
     ) -> None:
         self.allowed_roots = tuple(path.resolve() for path in allowed_roots)
         self.allowed_services = frozenset(allowed_services)

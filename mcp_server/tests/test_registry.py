@@ -71,6 +71,11 @@ def test_parameter_validation_and_missing_capability() -> None:
 
 
 def test_service_and_journal_parameters_are_constrained() -> None:
+    default_provider = ReadOnlyProvider()
+    result = default_provider.service_status("sshd")
+    assert result["service"] == "sshd"
+    assert result["supported"] is False or "properties" in result
+
     provider = ReadOnlyProvider(allowed_services=("nginx",))
     with pytest.raises(ValueError, match="SERVICE_NOT_ALLOWED"):
         provider.service_status("sshd")
