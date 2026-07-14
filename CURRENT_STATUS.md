@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 LoongArch rpds-py 规避 archery 1.2.2
+
+- 官方麒麟 LoongArch VM 继续在 `archery 1.2.2` 处失败，经源码检查确认来源为 `rpds-py`：`rpds-py>=0.28.0` 的 `Cargo.lock` 引入 `archery 1.2.2`，而该 crate 要求 Cargo `edition2024`。
+- 已将运行依赖显式约束为 `rpds-py>=0.27.1,<0.28`，重新锁定并导出部署依赖；`rpds-py==0.27.1` 使用 `archery 1.2.1`，避开 `edition2024`。部署 requirements 继续剥离未使用的 `cryptography/cffi/pycparser`，并保留 `--no-deps` 安装策略。
+- 本轮验证：`pytest -q` 110 项通过；`ruff`、`mypy`、`security_scan.py`、`validate_phase0.py` 均通过；干净 Python 3.11 部署安装冒烟通过，安装列表包含 `rpds-py==0.27.1` 且可导入后端 app、FastMCP 并列出 14 个 Tool。
+- 该修复只收敛 LoongArch 源码构建依赖，不改变安全边界、默认 `READ_ONLY`、审批、审计或 Tool 行为。
+
 ## 2026-07-14 LoongArch maturin 约束修正为 1.9.4
 
 - 官方麒麟 LoongArch VM 新错误显示源码包构建依赖要求 `maturin>=1.9,<2.0`，上一版 `maturin==1.8.7` 约束过低，导致 pip 构建依赖解析冲突。
