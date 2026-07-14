@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 LoongArch 部署专用依赖剥离 crypto
+
+- 官方麒麟 LoongArch VM 仍在 `archery 1.2.2` 处失败，确认单纯降级 `cryptography` 不足以规避 MCP SDK `pyjwt[crypto]` 的源码构建链。
+- 已改为部署专用策略：`deploy/requirements.txt` 剥离 `cryptography`、`cffi`、`pycparser`，保留 `pyjwt==2.13.0`；`deploy/install.sh` 使用 `pip install --no-deps --require-hashes`，防止 pip 根据 `mcp` 元数据再次拉取未使用的 JWT crypto 扩展。项目自身会话认证不使用 JWT/cryptography，MCP 当前仅使用 FastMCP stdio 和本地 Tool registry。
+- 已移除安装脚本中不再需要的 libffi-devel 前置检查；LoongArch 仍需 `python3-devel gcc make rust cargo` 以应对 pydantic-core 等源码构建。
+- 本地干净 Python 3.11 部署冒烟通过：使用剥离后的 requirements 和 `--no-deps --require-hashes` 安装后，可导入 `FastMCP`、`backend.app.main`，并列出 14 个 Tool。完整回归：`pytest -q` 110 项通过，`ruff`、`mypy`、`security_scan.py`、`validate_phase0.py` 均通过。
+- 该策略为 LoongArch 部署兼容性取舍，不改变默认 `READ_ONLY`、安全护栏、审批、审计或受控执行边界；如未来启用 MCP 远程 OAuth/JWT 验签能力，必须重新引入经过 LoongArch 验证的加密依赖或离线 wheelhouse。
+
 ## 2026-07-14 LoongArch Rust 依赖继续收敛
 
 - 官方麒麟 LoongArch VM 继续在 `archery 1.2.2` 处失败，说明 `cryptography==42.0.8` 源码构建仍会触发不兼容 Cargo 1.82.0 的 Rust crate。

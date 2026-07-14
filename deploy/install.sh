@@ -16,15 +16,11 @@ PY
 if [[ ! -f "$python_include/Python.h" ]]; then
   echo "missing Python development headers: $python_include/Python.h" >&2
   echo "Install build dependencies first, for example:" >&2
-  echo "  yum install -y python3-devel gcc make libffi-devel openssl-devel rust cargo" >&2
+  echo "  yum install -y python3-devel gcc make rust cargo" >&2
   exit 1
 fi
 if ! command -v gcc >/dev/null 2>&1; then
   echo "missing gcc; install build dependencies first: yum install -y gcc make" >&2
-  exit 1
-fi
-if ! ldconfig -p 2>/dev/null | grep -q libffi && ! pkg-config --exists libffi 2>/dev/null; then
-  echo "libffi development files may be missing; install: yum install -y libffi-devel" >&2
   exit 1
 fi
 
@@ -38,7 +34,7 @@ install -d -m 0755 "$APP_ROOT/frontend"
 cp -a "$SOURCE_ROOT/frontend/dist/." "$APP_ROOT/frontend/"
 
 python3 -m venv "$APP_ROOT/.venv"
-"$APP_ROOT/.venv/bin/pip" install --no-cache-dir --require-hashes --requirement "$SOURCE_ROOT/deploy/requirements.txt"
+"$APP_ROOT/.venv/bin/pip" install --no-cache-dir --no-deps --require-hashes --requirement "$SOURCE_ROOT/deploy/requirements.txt"
 chown -R root:kylin-guard "$APP_ROOT"
 chown -R kylin-guard:kylin-guard "$APP_ROOT/data"
 if command -v setfacl >/dev/null 2>&1; then
