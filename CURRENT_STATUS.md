@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 VM `/tmp` 清理候选不可见修复
+
+- 针对“测试 `.msi` 放在 `/tmp`，页面显示扫描 `/tmp` 但没有识别到”的反馈，已定位根因：`kylin-guard.service` 原先设置 `PrivateTmp=true`，systemd 会给后端服务创建隔离的私有 `/tmp`，导致服务看不到用户在宿主 VM 终端放入的 `/tmp/*.msi`。
+- 已将 API 服务单元改为 `PrivateTmp=false`，使只读 MCP 工具能看到宿主机真实 `/tmp`，从而完成磁盘空间诊断和安全清理候选发现；这不放开写操作，不引入通用 Shell，也不绕过审批。
+- 安全边界保持不变：READ_ONLY 只采集 `/tmp` 元数据和列出候选；真正删除仍必须在 `CONTROLLED_EXECUTION` 下经过 dry-run、人工审批、备份、执行后验证和审计。
+- `scripts/release_audit.py` 新增 `PrivateTmp=false` 检查，防止后续部署单元回退导致 `/tmp` 不可见。
+- VM 更新后需要重新安装/覆盖 systemd unit，并执行 `systemctl daemon-reload && systemctl restart kylin-guard`；仅 `git pull` 不会自动改变已安装的 `/etc/systemd/system/kylin-guard.service`。
+
 ## 2026-07-14 智能运维对话意图路由与清理候选实用性修复
 
 - 针对“查询网络状态”误返回系统快照、CPU/磁盘信息的问题，已重写 Agent 规划器的确定性中文关键词路由：网络状态类问题固定采集 `network_config_snapshot` 与 `network_socket_list`，带端口号的问题继续路由到 `port_owner_lookup`，不再被“占用”等泛词误判为磁盘问题。

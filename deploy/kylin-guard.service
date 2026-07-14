@@ -15,7 +15,10 @@ ExecStart=/opt/kylin-guard/.venv/bin/uvicorn backend.app.main:app --host 127.0.0
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
-PrivateTmp=true
+# The API must see the host /tmp for read-only disk pressure diagnosis and
+# cleanup-candidate discovery. Write execution is still blocked by READ_ONLY,
+# policy guardrails, approval flow, and fixed controlled executors.
+PrivateTmp=false
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/opt/kylin-guard/data

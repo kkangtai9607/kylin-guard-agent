@@ -13,7 +13,7 @@ def main() -> int:
     if re.search(r"(?:[A-Za-z]:\\|file://|\.\./)", requirements):
         errors.append("requirements contains a local or relative path")
     service = (ROOT / "deploy/kylin-guard.service").read_text(encoding="utf-8")
-    for required in ("User=kylin-guard", "NoNewPrivileges=true", "ProtectSystem=strict"):
+    for required in ("User=kylin-guard", "NoNewPrivileges=true", "ProtectSystem=strict", "PrivateTmp=false"):
         if required not in service:
             errors.append(f"systemd hardening missing: {required}")
     install = (ROOT / "deploy/install.sh").read_text(encoding="utf-8")
