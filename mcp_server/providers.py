@@ -25,6 +25,7 @@ FIXED_COMMANDS: dict[str, tuple[str, ...]] = {
 
 def _default_allowed_roots() -> tuple[Path, ...]:
     candidates = (
+        Path("/"),
         Path.cwd(),
         Path("/var/log"),
         Path("/tmp"),  # noqa: S108 - intentional read-only cleanup scan root.
@@ -40,13 +41,60 @@ def _default_allowed_roots() -> tuple[Path, ...]:
     return tuple(roots or (Path.cwd(),))
 
 
+def _default_cleanup_roots() -> tuple[Path, ...]:
+    candidates = (
+        Path.cwd(),
+        Path("/var/log"),
+        Path("/tmp"),  # noqa: S108 - intentional controlled cleanup candidate scan root.
+        Path("/var/tmp"),  # noqa: S108 - intentional controlled cleanup candidate scan root.
+    )
+    roots: list[Path] = []
+    for path in candidates:
+        try:
+            if path.exists() and path.is_dir():
+                roots.append(path)
+        except OSError:
+            continue
+    return tuple(roots or (Path.cwd(),))
+
+
+def _is_filesystem_root(path: Path) -> bool:
+    return path.parent == path
+
+
 class ReadOnlyProvider:
     def __init__(
         self,
         allowed_roots: tuple[Path, ...] | None = None,
+        cleanup_roots: tuple[Path, ...] | None = None,
+        protected_roots: tuple[Path, ...] | None = None,
         allowed_services: tuple[str, ...] = ("nginx", "sshd"),
     ) -> None:
         self.allowed_roots = tuple(path.resolve() for path in (allowed_roots or _default_allowed_roots()))
+        cleanup_candidates = cleanup_roots if cleanup_roots is not None else _default_cleanup_roots()
+        self.cleanup_roots = tuple(
+            path.resolve()
+            for path in cleanup_candidates
+            if path.exists() and path.is_dir() and not _is_filesystem_root(path.resolve())
+        )
+        self.protected_roots = tuple(
+            path.resolve()
+            for path in (
+                protected_roots
+                or (
+                    Path("/etc/shadow"),
+                    Path("/etc/gshadow"),
+                    Path("/root"),
+                    Path("/boot"),
+                    Path("/proc"),
+                    Path("/sys"),
+                    Path("/dev"),
+                    Path("/run"),
+                    Path("/var/lib"),
+                )
+            )
+            if path.exists()
+        )
         self.allowed_services = frozenset(allowed_services)
 
     def capability_probe(self) -> dict[str, Any]:
@@ -137,7 +185,32 @@ class ReadOnlyProvider:
     def disk_usage_scan(self, path: str = ".") -> dict[str, Any]:
         target = self._safe_path(path)
         usage = shutil.disk_usage(target)
-        return {"path": str(target), "total": usage.total, "used": usage.used, "free": usage.free}
+        filesystems: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for root in self.allowed_roots:
+            try:
+                resolved = str(root.resolve())
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                root_usage = shutil.disk_usage(root)
+                filesystems.append(
+                    {
+                        "path": str(root),
+                        "total": root_usage.total,
+                        "used": root_usage.used,
+                        "free": root_usage.free,
+                    }
+                )
+            except OSError:
+                continue
+        return {
+            "path": str(target),
+            "total": usage.total,
+            "used": usage.used,
+            "free": usage.free,
+            "filesystems": filesystems,
+        }
 
     def large_file_scan(
         self, path: str = ".", min_bytes: int = 10_000_000, limit: int = 100
@@ -146,7 +219,7 @@ class ReadOnlyProvider:
             matches: list[dict[str, Any]] = []
             scanned_roots: list[str] = []
             truncated = False
-            for target in self.allowed_roots:
+            for target in self.cleanup_roots:
                 if not target.exists() or not target.is_dir():
                     continue
                 scanned_roots.append(str(target))
@@ -314,6 +387,8 @@ class ReadOnlyProvider:
         if target.is_symlink() or not any(
             target == root or root in target.parents for root in self.allowed_roots
         ):
+            raise ValueError("PATH_REJECTED")
+        if any(target == root or root in target.parents for root in self.protected_roots):
             raise ValueError("PATH_REJECTED")
         return target
 

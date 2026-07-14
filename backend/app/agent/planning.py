@@ -190,6 +190,8 @@ class Planner:
             return {"port": max(1, min(65535, port))}
         if tool == "large_file_scan":
             return {"path": "__cleanup_roots__", "min_bytes": 10_000_000, "limit": 50}
+        if tool == "disk_usage_scan":
+            return {"path": "/"}
         return {}
 
     @staticmethod

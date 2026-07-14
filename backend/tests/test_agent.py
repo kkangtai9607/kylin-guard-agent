@@ -49,6 +49,7 @@ def test_unavailable_llm_uses_repeatable_read_only_fallback() -> None:
     first = Planner(UnavailableLLMProvider(), mcp).plan("检查磁盘空间")
     second = Planner(UnavailableLLMProvider(), mcp).plan("检查磁盘空间")
     assert first.steps[0].tool_name == second.steps[0].tool_name == "disk_usage_scan"
+    assert first.steps[0].arguments == {"path": "/"}
     assert first.requires_approval is False
 
 

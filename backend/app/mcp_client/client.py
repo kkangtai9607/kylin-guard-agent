@@ -16,6 +16,7 @@ class KylinGuardMCPClient:
         self.registry = registry or ToolRegistry.for_mode(
             config.mode,
             allowed_roots=config.read_only_scan_roots(),
+            cleanup_roots=config.controlled_cleanup_roots(),
         )
 
     def health(self) -> dict[str, Any]:
@@ -34,3 +35,7 @@ class KylinGuardMCPClient:
     def allowed_roots(self) -> tuple[Path, ...]:
         """Expose the provider's normalized read scope, never a caller-supplied path."""
         return self.registry.provider.allowed_roots
+
+    def cleanup_roots(self) -> tuple[Path, ...]:
+        """Expose the provider's controlled cleanup candidate scope."""
+        return self.registry.provider.cleanup_roots

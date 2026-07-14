@@ -144,7 +144,7 @@ class CleanupAnalysisService:
 
     def __init__(self, mcp: KylinGuardMCPClient, policy: CleanupPolicy | None = None) -> None:
         self.mcp = mcp
-        roots = mcp.allowed_roots()
+        roots = mcp.cleanup_roots()
         self.classifier = CleanupCandidateClassifier(
             policy
             or CleanupPolicy(

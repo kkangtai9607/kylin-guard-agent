@@ -46,11 +46,16 @@ class ToolRegistry:
         }
 
     @classmethod
-    def for_mode(cls, mode: str, allowed_roots: tuple[Path, ...] | None = None) -> ToolRegistry:
+    def for_mode(
+        cls,
+        mode: str,
+        allowed_roots: tuple[Path, ...] | None = None,
+        cleanup_roots: tuple[Path, ...] | None = None,
+    ) -> ToolRegistry:
         return (
             cls(DemoProvider(), is_demo=True)
             if mode == "DEMO"
-            else cls(ReadOnlyProvider(allowed_roots=allowed_roots))
+            else cls(ReadOnlyProvider(allowed_roots=allowed_roots, cleanup_roots=cleanup_roots))
         )
 
     def list_tools(self) -> list[ToolMetadata]:

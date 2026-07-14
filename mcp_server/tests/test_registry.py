@@ -36,6 +36,21 @@ def test_allowed_root_and_large_file_limit(tmp_path: Path) -> None:
     assert len(result["files"]) == 1
 
 
+def test_cleanup_roots_are_separate_from_global_read_roots(tmp_path: Path) -> None:
+    cleanup = tmp_path / "cleanup"
+    other = tmp_path / "other"
+    cleanup.mkdir()
+    other.mkdir()
+    (cleanup / "candidate.log").write_bytes(b"x" * 64)
+    (other / "ignored.log").write_bytes(b"x" * 64)
+
+    provider = ReadOnlyProvider(allowed_roots=(tmp_path,), cleanup_roots=(cleanup,))
+    result = provider.large_file_scan("__cleanup_roots__", min_bytes=1, limit=10)
+
+    assert result["scanned_roots"] == [str(cleanup.resolve())]
+    assert [item["path"] for item in result["files"]] == [str(cleanup / "candidate.log")]
+
+
 def test_path_outside_allowed_root_is_rejected(tmp_path: Path) -> None:
     allowed = tmp_path / "allowed"
     outside = tmp_path / "outside"

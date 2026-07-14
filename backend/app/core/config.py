@@ -100,6 +100,7 @@ class AppConfig(BaseModel):
 
     def read_only_scan_roots(self) -> tuple[Path, ...]:
         return (
+            Path("/"),
             Path.cwd(),
             Path("/var/log"),
             Path("/tmp"),  # noqa: S108 - intentional read-only cleanup scan root.
