@@ -39,6 +39,10 @@ PIP_CONSTRAINT="$SOURCE_ROOT/deploy/build-constraints.txt" \
 chown -R root:kylin-guard "$APP_ROOT"
 chown -R kylin-guard:kylin-guard "$APP_ROOT/data"
 if command -v setfacl >/dev/null 2>&1; then
+  if id nginx >/dev/null 2>&1; then
+    setfacl -m u:nginx:--x "$APP_ROOT"
+    setfacl -R -m u:nginx:rX "$APP_ROOT/frontend"
+  fi
   setfacl -m u:kylin-guard-exec:rwx "$APP_ROOT/data"
   setfacl -m d:u:kylin-guard-exec:rwx "$APP_ROOT/data"
   setfacl -m u:kylin-guard-exec:rw "$APP_ROOT/data/kylin_guard.db" 2>/dev/null || true

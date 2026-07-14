@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 LoongArch 前端访问与任务页布局修复
+
+- LoongArch VM 已完成依赖构建、后端健康接口和 Nginx 启动；首页 500 定位为 Nginx 用户无法 `stat /opt/kylin-guard/frontend/index.html`，根因是 `/opt/kylin-guard` 目录最小权限阻止 Nginx 穿越目录读取静态文件。
+- 已在 `deploy/install.sh` 中补充最小 ACL：若存在 `nginx` 用户，仅授予其穿越 `$APP_ROOT` 与只读访问 `$APP_ROOT/frontend` 的权限，不开放后端代码目录、数据库目录、Secret 或受控执行代理。
+- 智能运维对话执行后页面横向移动定位为长证据、长任务字段、时间线和表格内容可能撑宽布局；已在全局样式和任务页样式中增加 `minmax(0,1fr)`、`min-width:0`、横向溢出保护和长文本换行，避免底部横向滚动条反复出现。
+- 以上变更只影响前端展示和 Nginx 静态文件读取权限，不改变默认 `READ_ONLY`、后端安全护栏、审批、审计、MCP Tool 或受控执行边界。
+
 ## 2026-07-14 LoongArch rpds 1.1.1 继续收敛
 
 - 官方麒麟 LoongArch VM 新错误显示 `rpds-py==0.27.1` 的源码构建会下载 Rust crate `rpds v1.1.1`，该 crate 同样要求 Cargo `edition2024`，目标机 Cargo 1.82.0 无法解析，导致 `metadata-generation-failed`。
