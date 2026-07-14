@@ -156,15 +156,15 @@ class AgentOrchestrator:
                 "headline": "请求已被安全策略阻断",
                 "answer": "该请求命中 L4 禁止规则，系统没有调用任何工具，也没有读取敏感文件。",
                 "findings": ["未执行系统访问", "未产生工具调用", "无需回滚"],
-                "recommendations": ["请改用只读诊断类问题，例如检查磁盘、服务、端口或进程状态。"],
+                "recommendations": ["请改用诊断类问题，例如检查磁盘、服务、端口或进程状态。"],
             }
 
         by_tool = {record.tool_name: record.payload for record in evidence}
         findings: list[str] = []
         recommendations: list[str] = []
         level = "ok" if status == "SUCCEEDED" else "warning"
-        headline = "只读诊断完成"
-        answer = "已完成只读证据采集，未执行任何写操作。"
+        headline = "诊断完成"
+        answer = "已完成系统证据采集；本次没有执行删除、重启或配置修改。"
 
         if "service_status" in by_tool:
             data = AgentOrchestrator._tool_data(by_tool["service_status"])
@@ -176,7 +176,7 @@ class AgentOrchestrator:
             result = str(properties.get("Result", "unknown"))
             if active == "active":
                 headline = f"{service} 当前未发现运行异常"
-                answer = f"{service} 当前 ActiveState=active，SubState={sub}，Result={result}。本次只读检查没有发现服务处于 failed/inactive 状态。"
+                answer = f"{service} 当前 ActiveState=active，SubState={sub}，Result={result}。本次检查没有发现服务处于 failed/inactive 状态。"
                 level = "ok"
             elif active in {"failed", "inactive"}:
                 headline = f"{service} 当前状态异常"
@@ -192,7 +192,7 @@ class AgentOrchestrator:
                 raw_lines = journal.get("lines")
                 lines: list[Any] = raw_lines if isinstance(raw_lines, list) else []
                 findings.append(f"最近 journal 日志：采集 {len(lines)} 行")
-            recommendations.append("如需执行重启，必须切换 CONTROLLED_EXECUTION 并经过人工审批；READ_ONLY 下不会重启服务。")
+            recommendations.append("如需执行重启，必须进入运维执行模式并完成风险确认；普通诊断不会重启服务。")
 
         elif "disk_usage_scan" in by_tool:
             data = AgentOrchestrator._tool_data(by_tool["disk_usage_scan"])
@@ -250,7 +250,7 @@ class AgentOrchestrator:
                 findings.append("未发现超过 10 MB 的大文件，或当前允许目录中没有可扫描对象。")
             if not eligible_count:
                 findings.append("没有进入候选的常见原因：未达保留期、文件类型不允许、位于保护路径、文件正在使用或不在 allowed roots 内。")
-            recommendations.append("READ_ONLY 模式只展示候选，不会删除；真正清理必须走 dry-run、审批、备份、执行、验证流程。")
+            recommendations.append("当前会列出清理候选；真正删除必须走预检查、风险确认、备份、执行、验证流程。")
 
         elif "process_list" in by_tool:
             data = AgentOrchestrator._tool_data(by_tool["process_list"])
@@ -263,7 +263,7 @@ class AgentOrchestrator:
                     findings.append(
                         f"进程 PID={item.get('pid')}，name={item.get('name')}，state={item.get('state')}，cpu_ticks={item.get('cpu_ticks', 0)}"
                     )
-            recommendations.append("如需瞬时 CPU 百分比，可后续增加固定 ps/top 采样 Tool；当前版本优先使用 /proc 只读数据。")
+            recommendations.append("如需瞬时 CPU 百分比，可后续增加固定 ps/top 采样 Tool；当前版本优先使用 /proc 诊断数据。")
 
         elif "port_owner_lookup" in by_tool:
             data = AgentOrchestrator._tool_data(by_tool["port_owner_lookup"])

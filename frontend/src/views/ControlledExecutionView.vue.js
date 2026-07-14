@@ -3,72 +3,110 @@ import { ElMessage } from "element-plus";
 import { api } from "../api";
 import { zhStatus } from "../status";
 const capabilities = reactive({ enabled: false, mode: "READ_ONLY", allowed_services: [], managed_configs: [], managed_processes: [] });
-const tool = ref("service_restart"), service = ref("nginx"), targetId = ref("nginx-main"), content = ref(""), pid = ref(2), preview = ref(), error = ref(""), submitting = ref(false), approvals = ref([]), executions = ref([]), taskIds = ref([]);
+const tool = ref("service_restart");
+const service = ref("nginx");
+const targetId = ref("nginx-main");
+const content = ref("");
+const pid = ref(2);
+const preview = ref();
+const error = ref("");
+const submitting = ref(false);
+const approvals = ref([]);
+const executions = ref([]);
+const taskIds = ref([]);
 const actionArguments = reactive({});
-async function loadCapabilities() { Object.assign(capabilities, await api("/controlled/capabilities")); service.value = capabilities.allowed_services[0] || ""; targetId.value = capabilities.managed_configs[0]?.target_id || ""; }
-async function prepare() { submitting.value = true; error.value = ""; try {
-    const task = await api("/tasks", { method: "POST", body: JSON.stringify({ goal: goalText(), requested_mode: "CONTROLLED_EXECUTION" }) });
-    taskIds.value.push(task.id);
-    let args;
-    if (tool.value === "service_restart")
-        args = { service: service.value };
-    else if (tool.value === "config_safe_update")
-        args = { target_id: targetId.value, content: content.value };
-    else {
-        const candidate = await api("/process-candidates", { method: "POST", body: JSON.stringify({ task_id: task.id, pid: pid.value }) });
-        args = { candidate_id: candidate.candidate_id };
+async function loadCapabilities() {
+    Object.assign(capabilities, await api("/controlled/capabilities"));
+    service.value = capabilities.allowed_services[0] || "";
+    targetId.value = capabilities.managed_configs[0]?.target_id || "";
+}
+async function prepare() {
+    submitting.value = true;
+    error.value = "";
+    try {
+        const task = await api("/tasks", { method: "POST", body: JSON.stringify({ goal: goalText(), requested_mode: "CONTROLLED_EXECUTION" }) });
+        taskIds.value.push(task.id);
+        let args;
+        if (tool.value === "service_restart")
+            args = { service: service.value };
+        else if (tool.value === "config_safe_update")
+            args = { target_id: targetId.value, content: content.value };
+        else {
+            const candidate = await api("/process-candidates", { method: "POST", body: JSON.stringify({ task_id: task.id, pid: pid.value }) });
+            args = { candidate_id: candidate.candidate_id };
+        }
+        preview.value = await api("/executions/dry-run", { method: "POST", body: JSON.stringify({ tool_name: tool.value, arguments: args }) });
+        const approval = await api(`/tasks/${task.id}/approvals`, { method: "POST", body: JSON.stringify({ tool_name: tool.value, arguments: args }) });
+        actionArguments[approval.id] = args;
+        ElMessage.success("风险确认已创建");
+        await refreshApprovals();
     }
-    preview.value = await api("/executions/dry-run", { method: "POST", body: JSON.stringify({ tool_name: tool.value, arguments: args }) });
-    const approval = await api(`/tasks/${task.id}/approvals`, { method: "POST", body: JSON.stringify({ tool_name: tool.value, arguments: args }) });
-    actionArguments[approval.id] = args;
-    ElMessage.success("审批申请已创建，请切换独立审批账号处理");
-    await refreshApprovals();
+    catch (e) {
+        error.value = e instanceof Error ? e.message : "操作准备失败";
+    }
+    finally {
+        submitting.value = false;
+    }
 }
-catch (e) {
-    error.value = e instanceof Error ? e.message : "受控操作准备失败";
+async function refreshApprovals() {
+    const collected = [];
+    for (const taskId of taskIds.value)
+        collected.push(...await api(`/tasks/${taskId}/approvals`));
+    approvals.value = collected;
 }
-finally {
-    submitting.value = false;
-} }
-async function refreshApprovals() { const collected = []; for (const taskId of taskIds.value) {
-    collected.push(...await api(`/tasks/${taskId}/approvals`));
-} approvals.value = collected; }
-async function execute(approval) { try {
-    const claimed = await api(`/approvals/${approval.id}/claim`, { method: "POST" });
-    const args = actionArguments[approval.id] || approval.arguments_summary;
-    await api("/executions/run", { method: "POST", body: JSON.stringify({ task_id: approval.task_id, tool_name: approval.tool_name, arguments: args, approval_token: claimed.approval_token }) });
-    delete actionArguments[approval.id];
-    ElMessage.success("执行与验证完成");
-    await refreshApprovals();
-    await loadExecutions();
+async function execute(approval) {
+    try {
+        const claimed = await api(`/approvals/${approval.id}/claim`, { method: "POST" });
+        const args = actionArguments[approval.id] || approval.arguments_summary;
+        await api("/executions/run", { method: "POST", body: JSON.stringify({ task_id: approval.task_id, tool_name: approval.tool_name, arguments: args, approval_token: claimed.approval_token }) });
+        delete actionArguments[approval.id];
+        ElMessage.success("执行与验证完成");
+        await refreshApprovals();
+        await loadExecutions();
+    }
+    catch (e) {
+        error.value = e instanceof Error ? e.message : "执行失败";
+    }
 }
-catch (e) {
-    error.value = e instanceof Error ? e.message : "执行失败";
-} }
-async function requestRollback(execution) { try {
-    const args = { change_id: execution.change_id };
-    const approval = await api(`/tasks/${execution.task_id}/approvals`, { method: "POST", body: JSON.stringify({ tool_name: "rollback_change", arguments: args }) });
-    if (!taskIds.value.includes(execution.task_id))
-        taskIds.value.push(execution.task_id);
-    actionArguments[approval.id] = args;
-    ElMessage.success("回滚审批申请已创建");
-    await refreshApprovals();
+async function requestRollback(execution) {
+    try {
+        const args = { change_id: execution.change_id };
+        const approval = await api(`/tasks/${execution.task_id}/approvals`, { method: "POST", body: JSON.stringify({ tool_name: "rollback_change", arguments: args }) });
+        if (!taskIds.value.includes(execution.task_id))
+            taskIds.value.push(execution.task_id);
+        actionArguments[approval.id] = args;
+        ElMessage.success("回滚风险确认已创建");
+        await refreshApprovals();
+    }
+    catch (e) {
+        error.value = e instanceof Error ? e.message : "回滚申请失败";
+    }
 }
-catch (e) {
-    error.value = e instanceof Error ? e.message : "回滚申请失败";
-} }
-async function loadExecutions() { executions.value = await api("/executions"); }
-function goalText() { if (tool.value === "service_restart")
-    return `重启白名单服务 ${service.value}`; if (tool.value === "config_safe_update")
-    return `安全更新托管配置 ${targetId.value}`; return `终止受控托管进程 PID ${pid.value}`; }
-function argumentText(value) { return Object.entries(value).map(([key, item]) => `${key}=${item}`).join(" · "); }
-onMounted(async () => { try {
-    await loadCapabilities();
-    await loadExecutions();
+async function loadExecutions() {
+    executions.value = await api("/executions");
 }
-catch (e) {
-    error.value = e instanceof Error ? e.message : "页面加载失败";
-} });
+function goalText() {
+    if (tool.value === "service_restart")
+        return `重启白名单服务 ${service.value}`;
+    if (tool.value === "config_safe_update")
+        return `安全更新托管配置 ${targetId.value}`;
+    return `终止受控托管进程 PID ${pid.value}`;
+}
+function argumentText(value) {
+    return Object.entries(value).map(([key, item]) => `${key}=${item}`).join(" · ");
+}
+function toolText(value) {
+    return { safe_log_cleanup: "清理候选文件", service_restart: "重启服务", config_safe_update: "更新配置", terminate_process: "终止进程", rollback_change: "回滚变更" }[value] || value;
+}
+onMounted(async () => {
+    try {
+        await loadCapabilities();
+        await loadExecutions();
+    }
+    catch (e) {
+        error.value = e instanceof Error ? e.message : "页面加载失败";
+    }
+});
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_elements;
@@ -86,15 +124,15 @@ if (!__VLS_ctx.capabilities.enabled) {
     ElAlert;
     // @ts-ignore
     const __VLS_1 = __VLS_asFunctionalComponent(__VLS_0, new __VLS_0({
-        title: "当前不是受控执行模式",
-        description: "页面允许查看设计，但所有写操作按钮均已禁用。请勿通过前端尝试提升服务器模式。",
-        type: "warning",
+        title: "当前处于诊断模式",
+        description: "可以查看操作流程和历史记录；涉及删除、重启、修改配置等写操作时，需要先由部署配置启用运维执行模式。",
+        type: "info",
         showIcon: true,
     }));
     const __VLS_2 = __VLS_1({
-        title: "当前不是受控执行模式",
-        description: "页面允许查看设计，但所有写操作按钮均已禁用。请勿通过前端尝试提升服务器模式。",
-        type: "warning",
+        title: "当前处于诊断模式",
+        description: "可以查看操作流程和历史记录；涉及删除、重启、修改配置等写操作时，需要先由部署配置启用运维执行模式。",
+        type: "info",
         showIcon: true,
     }, ...__VLS_functionalComponentArgsRest(__VLS_1));
 }
@@ -450,108 +488,115 @@ ElTable;
 // @ts-ignore
 const __VLS_102 = __VLS_asFunctionalComponent(__VLS_101, new __VLS_101({
     data: (__VLS_ctx.approvals),
-    emptyText: "本页面尚未创建审批申请",
+    emptyText: "本页面尚未创建风险确认",
 }));
 const __VLS_103 = __VLS_102({
     data: (__VLS_ctx.approvals),
-    emptyText: "本页面尚未创建审批申请",
+    emptyText: "本页面尚未创建风险确认",
 }, ...__VLS_functionalComponentArgsRest(__VLS_102));
 const { default: __VLS_105 } = __VLS_104.slots;
 // @ts-ignore
 [approvals,];
 const __VLS_106 = {}.ElTableColumn;
-/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
 ElTableColumn;
 // @ts-ignore
 const __VLS_107 = __VLS_asFunctionalComponent(__VLS_106, new __VLS_106({
-    prop: "tool_name",
     label: "工具",
     width: "190",
 }));
 const __VLS_108 = __VLS_107({
-    prop: "tool_name",
     label: "工具",
     width: "190",
 }, ...__VLS_functionalComponentArgsRest(__VLS_107));
-const __VLS_111 = {}.ElTableColumn;
+const { default: __VLS_110 } = __VLS_109.slots;
+{
+    const { default: __VLS_111 } = __VLS_109.slots;
+    const [scope] = __VLS_getSlotParameters(__VLS_111);
+    (__VLS_ctx.toolText(scope.row.tool_name));
+    // @ts-ignore
+    [toolText,];
+}
+var __VLS_109;
+const __VLS_112 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
 ElTableColumn;
 // @ts-ignore
-const __VLS_112 = __VLS_asFunctionalComponent(__VLS_111, new __VLS_111({
+const __VLS_113 = __VLS_asFunctionalComponent(__VLS_112, new __VLS_112({
     label: "参数摘要",
 }));
-const __VLS_113 = __VLS_112({
+const __VLS_114 = __VLS_113({
     label: "参数摘要",
-}, ...__VLS_functionalComponentArgsRest(__VLS_112));
-const { default: __VLS_115 } = __VLS_114.slots;
+}, ...__VLS_functionalComponentArgsRest(__VLS_113));
+const { default: __VLS_116 } = __VLS_115.slots;
 {
-    const { default: __VLS_116 } = __VLS_114.slots;
-    const [scope] = __VLS_getSlotParameters(__VLS_116);
+    const { default: __VLS_117 } = __VLS_115.slots;
+    const [scope] = __VLS_getSlotParameters(__VLS_117);
     (__VLS_ctx.argumentText(scope.row.arguments_summary));
     // @ts-ignore
     [argumentText,];
 }
-var __VLS_114;
-const __VLS_117 = {}.ElTableColumn;
+var __VLS_115;
+const __VLS_118 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
 ElTableColumn;
 // @ts-ignore
-const __VLS_118 = __VLS_asFunctionalComponent(__VLS_117, new __VLS_117({
+const __VLS_119 = __VLS_asFunctionalComponent(__VLS_118, new __VLS_118({
     label: "状态",
     width: "110",
 }));
-const __VLS_119 = __VLS_118({
+const __VLS_120 = __VLS_119({
     label: "状态",
     width: "110",
-}, ...__VLS_functionalComponentArgsRest(__VLS_118));
-const { default: __VLS_121 } = __VLS_120.slots;
+}, ...__VLS_functionalComponentArgsRest(__VLS_119));
+const { default: __VLS_122 } = __VLS_121.slots;
 {
-    const { default: __VLS_122 } = __VLS_120.slots;
-    const [scope] = __VLS_getSlotParameters(__VLS_122);
+    const { default: __VLS_123 } = __VLS_121.slots;
+    const [scope] = __VLS_getSlotParameters(__VLS_123);
     (__VLS_ctx.zhStatus(scope.row.status));
     // @ts-ignore
     [zhStatus,];
 }
-var __VLS_120;
-const __VLS_123 = {}.ElTableColumn;
+var __VLS_121;
+const __VLS_124 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
 ElTableColumn;
 // @ts-ignore
-const __VLS_124 = __VLS_asFunctionalComponent(__VLS_123, new __VLS_123({
+const __VLS_125 = __VLS_asFunctionalComponent(__VLS_124, new __VLS_124({
     label: "操作",
     width: "180",
 }));
-const __VLS_125 = __VLS_124({
+const __VLS_126 = __VLS_125({
     label: "操作",
     width: "180",
-}, ...__VLS_functionalComponentArgsRest(__VLS_124));
-const { default: __VLS_127 } = __VLS_126.slots;
+}, ...__VLS_functionalComponentArgsRest(__VLS_125));
+const { default: __VLS_128 } = __VLS_127.slots;
 {
-    const { default: __VLS_128 } = __VLS_126.slots;
-    const [scope] = __VLS_getSlotParameters(__VLS_128);
+    const { default: __VLS_129 } = __VLS_127.slots;
+    const [scope] = __VLS_getSlotParameters(__VLS_129);
     if (scope.row.status === 'APPROVED') {
-        const __VLS_129 = {}.ElButton;
+        const __VLS_130 = {}.ElButton;
         /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
         // @ts-ignore
         ElButton;
         // @ts-ignore
-        const __VLS_130 = __VLS_asFunctionalComponent(__VLS_129, new __VLS_129({
+        const __VLS_131 = __VLS_asFunctionalComponent(__VLS_130, new __VLS_130({
             ...{ 'onClick': {} },
             type: "success",
             size: "small",
         }));
-        const __VLS_131 = __VLS_130({
+        const __VLS_132 = __VLS_131({
             ...{ 'onClick': {} },
             type: "success",
             size: "small",
-        }, ...__VLS_functionalComponentArgsRest(__VLS_130));
-        let __VLS_133;
+        }, ...__VLS_functionalComponentArgsRest(__VLS_131));
         let __VLS_134;
-        const __VLS_135 = ({ click: {} },
+        let __VLS_135;
+        const __VLS_136 = ({ click: {} },
             { onClick: (...[$event]) => {
                     if (!(scope.row.status === 'APPROVED'))
                         return;
@@ -559,8 +604,8 @@ const { default: __VLS_127 } = __VLS_126.slots;
                     // @ts-ignore
                     [execute,];
                 } });
-        const { default: __VLS_136 } = __VLS_132.slots;
-        var __VLS_132;
+        const { default: __VLS_137 } = __VLS_133.slots;
+        var __VLS_133;
     }
     else if (scope.row.status === 'PENDING') {
         __VLS_asFunctionalElement(__VLS_elements.span, __VLS_elements.span)({});
@@ -569,7 +614,7 @@ const { default: __VLS_127 } = __VLS_126.slots;
         __VLS_asFunctionalElement(__VLS_elements.span, __VLS_elements.span)({});
     }
 }
-var __VLS_126;
+var __VLS_127;
 var __VLS_104;
 __VLS_asFunctionalElement(__VLS_elements.section, __VLS_elements.section)({
     ...{ class: "panel" },
@@ -580,162 +625,171 @@ __VLS_asFunctionalElement(__VLS_elements.div, __VLS_elements.div)({
 __VLS_asFunctionalElement(__VLS_elements.div, __VLS_elements.div)({});
 __VLS_asFunctionalElement(__VLS_elements.h3, __VLS_elements.h3)({});
 __VLS_asFunctionalElement(__VLS_elements.p, __VLS_elements.p)({});
-const __VLS_137 = {}.ElButton;
+const __VLS_138 = {}.ElButton;
 /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
 // @ts-ignore
 ElButton;
 // @ts-ignore
-const __VLS_138 = __VLS_asFunctionalComponent(__VLS_137, new __VLS_137({
+const __VLS_139 = __VLS_asFunctionalComponent(__VLS_138, new __VLS_138({
     ...{ 'onClick': {} },
 }));
-const __VLS_139 = __VLS_138({
+const __VLS_140 = __VLS_139({
     ...{ 'onClick': {} },
-}, ...__VLS_functionalComponentArgsRest(__VLS_138));
-let __VLS_141;
+}, ...__VLS_functionalComponentArgsRest(__VLS_139));
 let __VLS_142;
-const __VLS_143 = ({ click: {} },
+let __VLS_143;
+const __VLS_144 = ({ click: {} },
     { onClick: (__VLS_ctx.loadExecutions) });
-const { default: __VLS_144 } = __VLS_140.slots;
+const { default: __VLS_145 } = __VLS_141.slots;
 // @ts-ignore
 [loadExecutions,];
-var __VLS_140;
-const __VLS_145 = {}.ElTable;
+var __VLS_141;
+const __VLS_146 = {}.ElTable;
 /** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
 // @ts-ignore
 ElTable;
 // @ts-ignore
-const __VLS_146 = __VLS_asFunctionalComponent(__VLS_145, new __VLS_145({
+const __VLS_147 = __VLS_asFunctionalComponent(__VLS_146, new __VLS_146({
     data: (__VLS_ctx.executions),
     emptyText: "暂无执行记录",
 }));
-const __VLS_147 = __VLS_146({
+const __VLS_148 = __VLS_147({
     data: (__VLS_ctx.executions),
     emptyText: "暂无执行记录",
-}, ...__VLS_functionalComponentArgsRest(__VLS_146));
-const { default: __VLS_149 } = __VLS_148.slots;
+}, ...__VLS_functionalComponentArgsRest(__VLS_147));
+const { default: __VLS_150 } = __VLS_149.slots;
 // @ts-ignore
 [executions,];
-const __VLS_150 = {}.ElTableColumn;
-/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-// @ts-ignore
-ElTableColumn;
-// @ts-ignore
-const __VLS_151 = __VLS_asFunctionalComponent(__VLS_150, new __VLS_150({
-    prop: "tool_name",
-    label: "工具",
-    width: "180",
-}));
-const __VLS_152 = __VLS_151({
-    prop: "tool_name",
-    label: "工具",
-    width: "180",
-}, ...__VLS_functionalComponentArgsRest(__VLS_151));
-const __VLS_155 = {}.ElTableColumn;
-/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-// @ts-ignore
-ElTableColumn;
-// @ts-ignore
-const __VLS_156 = __VLS_asFunctionalComponent(__VLS_155, new __VLS_155({
-    prop: "target_ref",
-    label: "目标",
-}));
-const __VLS_157 = __VLS_156({
-    prop: "target_ref",
-    label: "目标",
-}, ...__VLS_functionalComponentArgsRest(__VLS_156));
-const __VLS_160 = {}.ElTableColumn;
+const __VLS_151 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
 ElTableColumn;
 // @ts-ignore
-const __VLS_161 = __VLS_asFunctionalComponent(__VLS_160, new __VLS_160({
+const __VLS_152 = __VLS_asFunctionalComponent(__VLS_151, new __VLS_151({
+    label: "工具",
+    width: "180",
+}));
+const __VLS_153 = __VLS_152({
+    label: "工具",
+    width: "180",
+}, ...__VLS_functionalComponentArgsRest(__VLS_152));
+const { default: __VLS_155 } = __VLS_154.slots;
+{
+    const { default: __VLS_156 } = __VLS_154.slots;
+    const [scope] = __VLS_getSlotParameters(__VLS_156);
+    (__VLS_ctx.toolText(scope.row.tool_name));
+    // @ts-ignore
+    [toolText,];
+}
+var __VLS_154;
+const __VLS_157 = {}.ElTableColumn;
+/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+// @ts-ignore
+ElTableColumn;
+// @ts-ignore
+const __VLS_158 = __VLS_asFunctionalComponent(__VLS_157, new __VLS_157({
+    prop: "target_ref",
+    label: "目标",
+}));
+const __VLS_159 = __VLS_158({
+    prop: "target_ref",
+    label: "目标",
+}, ...__VLS_functionalComponentArgsRest(__VLS_158));
+const __VLS_162 = {}.ElTableColumn;
+/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+// @ts-ignore
+ElTableColumn;
+// @ts-ignore
+const __VLS_163 = __VLS_asFunctionalComponent(__VLS_162, new __VLS_162({
     label: "状态",
     width: "110",
 }));
-const __VLS_162 = __VLS_161({
+const __VLS_164 = __VLS_163({
     label: "状态",
     width: "110",
-}, ...__VLS_functionalComponentArgsRest(__VLS_161));
-const { default: __VLS_164 } = __VLS_163.slots;
+}, ...__VLS_functionalComponentArgsRest(__VLS_163));
+const { default: __VLS_166 } = __VLS_165.slots;
 {
-    const { default: __VLS_165 } = __VLS_163.slots;
-    const [scope] = __VLS_getSlotParameters(__VLS_165);
+    const { default: __VLS_167 } = __VLS_165.slots;
+    const [scope] = __VLS_getSlotParameters(__VLS_167);
     (__VLS_ctx.zhStatus(scope.row.status));
     // @ts-ignore
     [zhStatus,];
 }
-var __VLS_163;
-const __VLS_166 = {}.ElTableColumn;
+var __VLS_165;
+const __VLS_168 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
 ElTableColumn;
 // @ts-ignore
-const __VLS_167 = __VLS_asFunctionalComponent(__VLS_166, new __VLS_166({
+const __VLS_169 = __VLS_asFunctionalComponent(__VLS_168, new __VLS_168({
     prop: "backup_status",
     label: "备份/快照",
     width: "140",
 }));
-const __VLS_168 = __VLS_167({
+const __VLS_170 = __VLS_169({
     prop: "backup_status",
     label: "备份/快照",
     width: "140",
-}, ...__VLS_functionalComponentArgsRest(__VLS_167));
-const __VLS_171 = {}.ElTableColumn;
+}, ...__VLS_functionalComponentArgsRest(__VLS_169));
+const __VLS_173 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
 ElTableColumn;
 // @ts-ignore
-const __VLS_172 = __VLS_asFunctionalComponent(__VLS_171, new __VLS_171({
+const __VLS_174 = __VLS_asFunctionalComponent(__VLS_173, new __VLS_173({
     label: "验证",
 }));
-const __VLS_173 = __VLS_172({
+const __VLS_175 = __VLS_174({
     label: "验证",
-}, ...__VLS_functionalComponentArgsRest(__VLS_172));
-const { default: __VLS_175 } = __VLS_174.slots;
+}, ...__VLS_functionalComponentArgsRest(__VLS_174));
+const { default: __VLS_177 } = __VLS_176.slots;
 {
-    const { default: __VLS_176 } = __VLS_174.slots;
-    const [scope] = __VLS_getSlotParameters(__VLS_176);
-    (scope.row.verifications.map((item) => `${item.status}: ${item.details}`).join('；'));
+    const { default: __VLS_178 } = __VLS_176.slots;
+    const [scope] = __VLS_getSlotParameters(__VLS_178);
+    (scope.row.verifications.map((item) => `${__VLS_ctx.zhStatus(item.status)}：${item.details}`).join("；"));
+    // @ts-ignore
+    [zhStatus,];
 }
-var __VLS_174;
-const __VLS_177 = {}.ElTableColumn;
+var __VLS_176;
+const __VLS_179 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
 ElTableColumn;
 // @ts-ignore
-const __VLS_178 = __VLS_asFunctionalComponent(__VLS_177, new __VLS_177({
+const __VLS_180 = __VLS_asFunctionalComponent(__VLS_179, new __VLS_179({
     label: "操作",
     width: "130",
 }));
-const __VLS_179 = __VLS_178({
+const __VLS_181 = __VLS_180({
     label: "操作",
     width: "130",
-}, ...__VLS_functionalComponentArgsRest(__VLS_178));
-const { default: __VLS_181 } = __VLS_180.slots;
+}, ...__VLS_functionalComponentArgsRest(__VLS_180));
+const { default: __VLS_183 } = __VLS_182.slots;
 {
-    const { default: __VLS_182 } = __VLS_180.slots;
-    const [scope] = __VLS_getSlotParameters(__VLS_182);
+    const { default: __VLS_184 } = __VLS_182.slots;
+    const [scope] = __VLS_getSlotParameters(__VLS_184);
     if (scope.row.rollback_available && __VLS_ctx.capabilities.enabled) {
         // @ts-ignore
         [capabilities,];
-        const __VLS_183 = {}.ElButton;
+        const __VLS_185 = {}.ElButton;
         /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
         // @ts-ignore
         ElButton;
         // @ts-ignore
-        const __VLS_184 = __VLS_asFunctionalComponent(__VLS_183, new __VLS_183({
+        const __VLS_186 = __VLS_asFunctionalComponent(__VLS_185, new __VLS_185({
             ...{ 'onClick': {} },
             type: "danger",
             size: "small",
         }));
-        const __VLS_185 = __VLS_184({
+        const __VLS_187 = __VLS_186({
             ...{ 'onClick': {} },
             type: "danger",
             size: "small",
-        }, ...__VLS_functionalComponentArgsRest(__VLS_184));
-        let __VLS_187;
-        let __VLS_188;
-        const __VLS_189 = ({ click: {} },
+        }, ...__VLS_functionalComponentArgsRest(__VLS_186));
+        let __VLS_189;
+        let __VLS_190;
+        const __VLS_191 = ({ click: {} },
             { onClick: (...[$event]) => {
                     if (!(scope.row.rollback_available && __VLS_ctx.capabilities.enabled))
                         return;
@@ -743,15 +797,15 @@ const { default: __VLS_181 } = __VLS_180.slots;
                     // @ts-ignore
                     [requestRollback,];
                 } });
-        const { default: __VLS_190 } = __VLS_186.slots;
-        var __VLS_186;
+        const { default: __VLS_192 } = __VLS_188.slots;
+        var __VLS_188;
     }
     else {
         __VLS_asFunctionalElement(__VLS_elements.span, __VLS_elements.span)({});
     }
 }
-var __VLS_180;
-var __VLS_148;
+var __VLS_182;
+var __VLS_149;
 /** @type {__VLS_StyleScopedClasses['controlled-page']} */ ;
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['panel-head']} */ ;
@@ -784,6 +838,7 @@ const __VLS_self = (await import('vue')).defineComponent({
         requestRollback: requestRollback,
         loadExecutions: loadExecutions,
         argumentText: argumentText,
+        toolText: toolText,
     }),
 });
 export default (await import('vue')).defineComponent({});

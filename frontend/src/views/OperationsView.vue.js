@@ -3,7 +3,7 @@ import { useRoute } from "vue-router";
 import { api } from "../api";
 import { zhStatus } from "../status";
 const route = useRoute(), kind = computed(() => String(route.meta.kind)), title = computed(() => String(route.meta.title));
-const descriptions = { inspections: "采集快照与安全基线，异常由确定性规则生成事件。", incidents: "跟踪巡检产生的故障和安全事件。", drift: "建立脱敏基线并比较当前配置。", knowledge: "未审核知识不能支持高风险执行。", audit: "查询、验证并导出防篡改审计链。", settings: "管理非秘密参数，密钥只能通过环境变量注入。" };
+const descriptions = { inspections: "巡检会读取系统快照、磁盘阈值、服务状态、监听端口、僵尸进程、procfs/systemctl/journalctl 可用性和工具注册完整性；异常由规则生成事件。", incidents: "跟踪巡检产生的故障和安全事件。", drift: "建立脱敏基线并比较当前配置。", knowledge: "未审核知识不能支持高风险执行。", audit: "查询、验证并导出防篡改审计链。", settings: "管理非秘密参数，密钥只能通过环境变量注入。" };
 const endpoints = { inspections: "/inspections", incidents: "/incidents", drift: "/config-drift", knowledge: "/knowledge", audit: "/audit/events", settings: "/settings" };
 const labels = { id: "编号", document_id: "文档编号", title: "标题", summary: "摘要", severity: "级别", status: "状态", path_ref: "配置标识", created_at: "时间", captured_at: "采集时间", event_type: "事件类型" };
 const rows = ref([]), raw = ref(""), error = ref(""), result = ref(""), query = ref("Linux"), form = reactive({ path_ref: "", document_id: "", title: "", content: "" }), settings = reactive({ snapshot_interval_seconds: 300, retention_days: 30 });

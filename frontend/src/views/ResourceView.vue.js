@@ -2,26 +2,80 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { api } from "../api";
 import { zhStatus } from "../status";
-const route = useRoute(), loading = ref(false), error = ref(""), rows = ref([]), raw = ref("");
+const route = useRoute();
+const loading = ref(false);
+const error = ref("");
+const rows = ref([]);
+const raw = ref("");
 const endpoint = computed(() => String(route.meta.endpoint || ""));
-const labels = { event_id: "事件编号", event_type: "事件类型", task_id: "任务编号", timestamp: "时间", name: "工具名称", title_zh: "中文名称", risk_level: "风险等级", read_only: "只读工具", status: "状态", duration_ms: "耗时（毫秒）" };
-const keys = computed(() => rows.value.length ? Object.keys(rows.value[0]).filter(k => !["payload", "previous_hash", "current_hash"].includes(k)).slice(0, 7) : []);
-function format(v) { if (typeof v === "boolean")
-    return v ? "是" : "否"; if (v == null)
-    return "—"; return zhStatus(v); }
-async function load() { loading.value = true; error.value = ""; rows.value = []; raw.value = ""; try {
-    const data = await api(endpoint.value);
-    if (Array.isArray(data))
-        rows.value = data;
-    else
-        raw.value = JSON.stringify(data, null, 2);
+const sourceHint = computed(() => {
+    if (endpoint.value.includes("audit"))
+        return "数据来源：审计日志与哈希链";
+    if (endpoint.value.includes("mcp"))
+        return "数据来源：MCP 工具注册表";
+    return "数据来源：麒麟智维盾后端接口";
+});
+const labels = {
+    event_id: "事件编号",
+    event_type: "事件类型",
+    task_id: "任务编号",
+    timestamp: "时间",
+    actor_id: "操作者",
+    source: "数据来源",
+    name: "工具名称",
+    title_zh: "中文名称",
+    risk_level: "风险等级",
+    read_only: "读取类工具",
+    status: "状态",
+    duration_ms: "耗时（毫秒）",
+};
+const keys = computed(() => rows.value.length
+    ? Object.keys(rows.value[0])
+        .filter((key) => !["payload", "previous_hash", "current_hash"].includes(key))
+        .slice(0, 7)
+    : []);
+function format(value, key) {
+    if (key === "source")
+        return sourceText(value);
+    if (typeof value === "boolean")
+        return value ? "是" : "否";
+    if (value == null)
+        return "—";
+    return zhStatus(value);
 }
-catch (e) {
-    error.value = e instanceof Error ? e.message : "加载失败";
+function sourceText(value) {
+    return {
+        system_snapshot: "系统快照",
+        disk_usage_scan: "磁盘用量扫描",
+        large_file_scan: "大文件扫描",
+        process_list: "进程列表",
+        service_status: "服务状态",
+        journal_query: "服务日志",
+        network_socket_list: "监听端口",
+        network_config_snapshot: "网络配置",
+        security_baseline_scan: "安全基线巡检",
+        config_drift_check: "配置漂移检查",
+    }[String(value)] || String(value ?? "—");
 }
-finally {
-    loading.value = false;
-} }
+async function load() {
+    loading.value = true;
+    error.value = "";
+    rows.value = [];
+    raw.value = "";
+    try {
+        const data = await api(endpoint.value);
+        if (Array.isArray(data))
+            rows.value = data;
+        else
+            raw.value = JSON.stringify(data, null, 2);
+    }
+    catch (e) {
+        error.value = e instanceof Error ? e.message : "加载失败";
+    }
+    finally {
+        loading.value = false;
+    }
+}
 onMounted(load);
 watch(endpoint, load);
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
@@ -41,6 +95,9 @@ __VLS_asFunctionalElement(__VLS_elements.h3, __VLS_elements.h3)({});
 // @ts-ignore
 [$route,];
 __VLS_asFunctionalElement(__VLS_elements.p, __VLS_elements.p)({});
+(__VLS_ctx.sourceHint);
+// @ts-ignore
+[sourceHint,];
 const __VLS_0 = {}.ElButton;
 /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
 // @ts-ignore
@@ -126,7 +183,7 @@ if (__VLS_ctx.rows.length) {
         {
             const { default: __VLS_23 } = __VLS_21.slots;
             const [scope] = __VLS_getSlotParameters(__VLS_23);
-            (__VLS_ctx.format(scope.row[key]));
+            (__VLS_ctx.format(scope.row[key], key));
             // @ts-ignore
             [format,];
         }
@@ -166,6 +223,7 @@ const __VLS_self = (await import('vue')).defineComponent({
         error: error,
         rows: rows,
         raw: raw,
+        sourceHint: sourceHint,
         labels: labels,
         keys: keys,
         format: format,

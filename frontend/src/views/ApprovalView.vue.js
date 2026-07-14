@@ -13,14 +13,14 @@ finally {
     loading.value = false;
 } }
 async function decide(id, action) { try {
-    const reason = await ElMessageBox.prompt(`确认${action === "approve" ? "批准" : "拒绝"}此 L3 操作？请输入公开理由。`, "安全二次确认", { confirmButtonText: "确认", cancelButtonText: "取消", inputPattern: /.+/, inputErrorMessage: "必须填写理由", type: action === "approve" ? "warning" : "error" });
+    const reason = await ElMessageBox.prompt(`确认${action === "approve" ? "执行" : "取消"}此 L3 操作？请输入公开理由。`, "操作确认", { confirmButtonText: "确认", cancelButtonText: "返回", inputPattern: /.+/, inputErrorMessage: "必须填写理由", type: action === "approve" ? "warning" : "error" });
     await api(`/approvals/${id}/${action}`, { method: "POST", body: JSON.stringify({ reason: reason.value }) });
-    ElMessage.success("审批决定已写入防篡改审计链");
+    ElMessage.success("确认结果已写入防篡改审计链");
     await load();
 }
 catch (e) {
     if (e !== "cancel" && e !== "close")
-        error.value = e instanceof Error ? e.message : "审批失败";
+        error.value = e instanceof Error ? e.message : "确认失败";
 } }
 function summary(value) { return Object.entries(value).map(([key, item]) => `${key}=${item}`).join(" · ") || "无公开参数"; }
 onMounted(load);
@@ -99,12 +99,12 @@ ElTableColumn;
 // @ts-ignore
 const __VLS_19 = __VLS_asFunctionalComponent(__VLS_18, new __VLS_18({
     prop: "tool_name",
-    label: "受控工具",
+    label: "运维动作",
     width: "180",
 }));
 const __VLS_20 = __VLS_19({
     prop: "tool_name",
-    label: "受控工具",
+    label: "运维动作",
     width: "180",
 }, ...__VLS_functionalComponentArgsRest(__VLS_19));
 const __VLS_23 = {}.ElTableColumn;
@@ -204,11 +204,11 @@ const __VLS_51 = {}.ElTableColumn;
 ElTableColumn;
 // @ts-ignore
 const __VLS_52 = __VLS_asFunctionalComponent(__VLS_51, new __VLS_51({
-    label: "审批操作",
+    label: "确认操作",
     width: "180",
 }));
 const __VLS_53 = __VLS_52({
-    label: "审批操作",
+    label: "确认操作",
     width: "180",
 }, ...__VLS_functionalComponentArgsRest(__VLS_52));
 const { default: __VLS_55 } = __VLS_54.slots;
@@ -286,10 +286,10 @@ if (!__VLS_ctx.loading && !__VLS_ctx.rows.length) {
     ElEmpty;
     // @ts-ignore
     const __VLS_74 = __VLS_asFunctionalComponent(__VLS_73, new __VLS_73({
-        description: "暂无待审批任务",
+        description: "暂无待确认操作",
     }));
     const __VLS_75 = __VLS_74({
-        description: "暂无待审批任务",
+        description: "暂无待确认操作",
     }, ...__VLS_functionalComponentArgsRest(__VLS_74));
 }
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;

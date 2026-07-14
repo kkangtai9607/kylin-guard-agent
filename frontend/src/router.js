@@ -25,8 +25,8 @@ const router = createRouter({
             children: [
                 { path: "", component: DashboardView, meta: { title: "运维驾驶舱" } },
                 { path: "tasks", component: TaskView, meta: { title: "智能运维对话" } },
-                { path: "approvals", component: ApprovalView, meta: { title: "安全审批中心" } },
-                { path: "controlled", component: ControlledExecutionView, meta: { title: "受控操作台" } },
+                { path: "approvals", component: ApprovalView, meta: { title: "风险确认中心" } },
+                { path: "controlled", component: ControlledExecutionView, meta: { title: "运维操作台" } },
                 { path: "timeline", component: ResourceView, meta: { title: "任务时间线", endpoint: "/audit/events" } },
                 { path: "mcp", component: ResourceView, meta: { title: "MCP 工具中心", endpoint: "/mcp/tools" } },
                 ...operations.map(([path, title, kind]) => ({ path, component: OperationsView, meta: { title, kind } })),
