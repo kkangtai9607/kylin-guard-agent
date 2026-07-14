@@ -86,11 +86,20 @@ class CleanupCandidate(BaseModel):
     requires_approval: bool = True
 
 
+class CleanupObservedFile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    size_bytes: int
+    modified_at: datetime
+    classification: str = "OBSERVED_LARGE_FILE"
+
+
 class CleanupDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
     eligible: bool
     reason_codes: list[str]
     candidate: CleanupCandidate | None = None
+    observed_file: CleanupObservedFile | None = None
 
 
 class CleanupCandidateClassifier:
@@ -118,6 +127,19 @@ class CleanupCandidateClassifier:
         except OSError:
             return CleanupDecision(eligible=False, reason_codes=["STAT_FAILED"])
 
+        reference = now or datetime.now(timezone.utc)
+        modified = datetime.fromtimestamp(metadata.st_mtime, timezone.utc)
+        low_risk_disposable = self._is_low_risk_disposable(target)
+        observed = CleanupObservedFile(
+            path=str(target),
+            size_bytes=metadata.st_size,
+            modified_at=modified,
+            classification=(
+                "DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE"
+                if low_risk_disposable
+                else "OBSERVED_LARGE_FILE"
+            ),
+        )
         if not stat.S_ISREG(metadata.st_mode):
             reasons.append("NOT_REGULAR_FILE")
         if not self._suffix_allowed(target):
@@ -128,10 +150,7 @@ class CleanupCandidateClassifier:
         if metadata.st_size < self.policy.minimum_size_bytes:
             reasons.append("BELOW_SIZE_THRESHOLD")
 
-        reference = now or datetime.now(timezone.utc)
-        modified = datetime.fromtimestamp(metadata.st_mtime, timezone.utc)
         age_seconds = (reference - modified).total_seconds()
-        low_risk_disposable = self._is_low_risk_disposable(target)
         if not low_risk_disposable and age_seconds < self.policy.minimum_age_days * 86400:
             reasons.append("RETENTION_PERIOD_NOT_MET")
         if use_state == FileUseState.OPEN:
@@ -139,7 +158,7 @@ class CleanupCandidateClassifier:
         elif use_state == FileUseState.UNKNOWN and not low_risk_disposable:
             reasons.append("OPEN_FILE_STATE_UNKNOWN")
         if reasons:
-            return CleanupDecision(eligible=False, reason_codes=reasons)
+            return CleanupDecision(eligible=False, reason_codes=reasons, observed_file=observed)
 
         snapshot = {
             "path": str(target),
@@ -154,6 +173,7 @@ class CleanupCandidateClassifier:
         return CleanupDecision(
             eligible=True,
             reason_codes=["SAFE_CANDIDATE"],
+            observed_file=observed,
             candidate=CleanupCandidate(
                 candidate_id=candidate_id,
                 path=str(target),

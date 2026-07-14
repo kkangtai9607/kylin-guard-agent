@@ -49,6 +49,8 @@ def test_open_or_unknown_file_fails_closed(tmp_path: Path) -> None:
         decision = classifier(tmp_path).classify(str(target), use_state=state)
         assert decision.eligible is False
         assert reason in decision.reason_codes
+        assert decision.observed_file is not None
+        assert decision.observed_file.path == str(target)
 
 
 def test_database_and_audit_logs_are_never_candidates(tmp_path: Path) -> None:
@@ -70,6 +72,8 @@ def test_new_installer_in_downloads_is_cleanup_candidate(tmp_path: Path) -> None
 
     assert decision.eligible is True
     assert decision.reason_codes == ["SAFE_CANDIDATE"]
+    assert decision.observed_file is not None
+    assert decision.observed_file.path == str(target)
     assert decision.candidate is not None
     assert decision.candidate.classification == "DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE"
 

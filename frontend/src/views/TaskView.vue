@@ -110,13 +110,13 @@
             </template>
           </el-table-column>
           <el-table-column label="类型" width="170">
-            <template #default="scope">{{ candidateType(scope.row.candidate?.classification) }}</template>
+            <template #default="scope">{{ candidateType(fileForDecision(scope.row)?.classification) }}</template>
           </el-table-column>
           <el-table-column label="文件">
-            <template #default="scope">{{ scope.row.candidate?.path || "无候选文件" }}</template>
+            <template #default="scope">{{ fileForDecision(scope.row)?.path || "无法读取路径" }}</template>
           </el-table-column>
           <el-table-column label="大小" width="130">
-            <template #default="scope">{{ formatBytes(scope.row.candidate?.size_bytes) }}</template>
+            <template #default="scope">{{ formatBytes(fileForDecision(scope.row)?.size_bytes) }}</template>
           </el-table-column>
           <el-table-column label="规则结果" min-width="230">
             <template #default="scope">{{ scope.row.reason_codes.map(reasonText).join("；") }}</template>
@@ -287,8 +287,8 @@ interface Diagnosis { level: string; headline: string; answer: string; findings:
 interface Evidence { evidence_id: string; evidence_type: string; source: string; title: string; value: string | number | boolean; anomaly_score: number; temporal_score: number; trust_label: string; tags: string[] }
 interface ToolEvidence { tool_name: string; payload: Record<string, unknown>; trust_label: string; injection_suspected: boolean }
 interface RootCause { title: string; confidence: number; evidence_ids: string[]; reason_summary: string; recommended_actions: string[] }
-interface Candidate { candidate_id: string; path: string; size_bytes: number; classification?: string }
-interface CleanupDecision { eligible: boolean; reason_codes: string[]; candidate: Candidate | null }
+interface Candidate { candidate_id?: string; path: string; size_bytes: number; classification?: string }
+interface CleanupDecision { eligible: boolean; reason_codes: string[]; candidate: Candidate | null; observed_file?: Candidate | null }
 interface AgentResult { status: string; summary: string; public_reason: string; diagnosis: Diagnosis; plan: Plan; decision_chain: Decision[]; evidence: ToolEvidence[]; normalized_evidence: Evidence[]; root_causes: RootCause[]; cleanup_analysis: CleanupDecision[] }
 interface Approval { id: string; task_id: string; tool_name: string; risk_level: string; status: string; arguments_summary: Record<string, string> }
 interface Claimed { approval_token: string }
@@ -329,7 +329,7 @@ async function run() {
 }
 
 async function requestCleanup(candidate: Candidate | null) {
-  if (!task.value || !candidate) return;
+  if (!task.value || !candidate?.candidate_id) return;
   const argumentsValue = { candidate_id: candidate.candidate_id };
   try {
     await api("/executions/dry-run", { method: "POST", body: JSON.stringify({ tool_name: "safe_log_cleanup", arguments: argumentsValue }) });
@@ -438,8 +438,16 @@ function reasonText(value: string) {
   } as Record<string, string>)[value] || value;
 }
 
+function fileForDecision(value: CleanupDecision) {
+  return value.candidate || value.observed_file || null;
+}
+
 function candidateType(value?: string) {
-  return ({ DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE: "下载/临时文件", SAFE_LOG_OR_CACHE_CANDIDATE: "日志/缓存文件" } as Record<string, string>)[String(value)] || "候选文件";
+  return ({
+    DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE: "下载/临时文件",
+    SAFE_LOG_OR_CACHE_CANDIDATE: "日志/缓存文件",
+    OBSERVED_LARGE_FILE: "扫描到的大文件",
+  } as Record<string, string>)[String(value)] || "扫描到的大文件";
 }
 
 function evidenceType(value: string) {

@@ -40,7 +40,7 @@ async function run() {
     }
 }
 async function requestCleanup(candidate) {
-    if (!task.value || !candidate)
+    if (!task.value || !candidate?.candidate_id)
         return;
     const argumentsValue = { candidate_id: candidate.candidate_id };
     try {
@@ -144,8 +144,15 @@ function reasonText(value) {
         NOT_REGULAR_FILE: "不是普通文件",
     }[value] || value;
 }
+function fileForDecision(value) {
+    return value.candidate || value.observed_file || null;
+}
 function candidateType(value) {
-    return { DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE: "下载/临时文件", SAFE_LOG_OR_CACHE_CANDIDATE: "日志/缓存文件" }[String(value)] || "候选文件";
+    return {
+        DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE: "下载/临时文件",
+        SAFE_LOG_OR_CACHE_CANDIDATE: "日志/缓存文件",
+        OBSERVED_LARGE_FILE: "扫描到的大文件",
+    }[String(value)] || "扫描到的大文件";
 }
 function evidenceType(value) {
     return { metric: "指标", file: "文件", process: "进程", service: "服务", log: "日志", network: "网络", config: "配置" }[value] || value;
@@ -610,9 +617,9 @@ if (__VLS_ctx.result && __VLS_ctx.task) {
         {
             const { default: __VLS_84 } = __VLS_82.slots;
             const [scope] = __VLS_getSlotParameters(__VLS_84);
-            (__VLS_ctx.candidateType(scope.row.candidate?.classification));
+            (__VLS_ctx.candidateType(__VLS_ctx.fileForDecision(scope.row)?.classification));
             // @ts-ignore
-            [candidateType,];
+            [candidateType, fileForDecision,];
         }
         var __VLS_82;
         const __VLS_85 = {}.ElTableColumn;
@@ -630,7 +637,9 @@ if (__VLS_ctx.result && __VLS_ctx.task) {
         {
             const { default: __VLS_90 } = __VLS_88.slots;
             const [scope] = __VLS_getSlotParameters(__VLS_90);
-            (scope.row.candidate?.path || "无候选文件");
+            (__VLS_ctx.fileForDecision(scope.row)?.path || "无法读取路径");
+            // @ts-ignore
+            [fileForDecision,];
         }
         var __VLS_88;
         const __VLS_91 = {}.ElTableColumn;
@@ -650,9 +659,9 @@ if (__VLS_ctx.result && __VLS_ctx.task) {
         {
             const { default: __VLS_96 } = __VLS_94.slots;
             const [scope] = __VLS_getSlotParameters(__VLS_96);
-            (__VLS_ctx.formatBytes(scope.row.candidate?.size_bytes));
+            (__VLS_ctx.formatBytes(__VLS_ctx.fileForDecision(scope.row)?.size_bytes));
             // @ts-ignore
-            [formatBytes,];
+            [fileForDecision, formatBytes,];
         }
         var __VLS_94;
         const __VLS_97 = {}.ElTableColumn;
@@ -1480,6 +1489,7 @@ const __VLS_self = (await import('vue')).defineComponent({
         toolTitle: toolTitle,
         causeTitle: causeTitle,
         reasonText: reasonText,
+        fileForDecision: fileForDecision,
         candidateType: candidateType,
         evidenceType: evidenceType,
         sourceText: sourceText,

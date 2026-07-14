@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-15 清理候选排除明细展示修复
+
+- 针对“结论显示发现 5 个超过阈值的大文件，但清理候选区域仍显示本次没有清理候选”的反馈，已拆分“扫描到的大文件”和“可直接发起清理的候选”：即使某个大文件因为类型、保护路径、占用状态或保留期被排除，也会在表格中展示路径、大小、类型和排除原因，不再只给出 0 个可清理候选的摘要。
+- `CleanupDecision` 新增 `observed_file` 字段；`candidate` 仍只代表可发起清理的已冻结候选，前端表格使用 `candidate || observed_file` 展示扫描结果，按钮只在 `eligible=true` 且存在 `candidate_id` 时可点。
+- 该修复不放宽删除边界：被排除的大文件仅可查看原因，不能发起删除；真正清理仍必须满足候选规则并经过预检查、风险确认、备份、执行、验证和审计。
+- 本轮真实回归：`npm run type-check` 通过；`npm run build` 通过（仅 Vite chunk 体积提示）；`uv run ruff check backend mcp_server` 通过；`uv run mypy backend mcp_server` 通过；`uv run pytest` 130 项通过、1 项 Windows 下 Linux `/proc` 专用测试跳过；`python scripts/security_scan.py` 通过。
+
 ## 2026-07-14 清理候选大文件不显示修复
 
 - 针对“页面显示清理候选为空，但 `/tmp` 或 Downloads 中实际存在大于 10 MB 的 `.msi` 测试文件”的反馈，已定位关键原因：候选分类阶段会额外调用 `open_file_lookup` 判断文件是否被占用；当目标机未安装 `/usr/bin/lsof` 或占用检测能力不可用时，旧逻辑将状态标记为 `OPEN_FILE_STATE_UNKNOWN` 并排除候选，导致大文件被扫描到也不展示。
