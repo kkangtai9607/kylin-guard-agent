@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-14 LoongArch 安装依赖兼容修复
+
+- 官方麒麟 LoongArch VM 第二轮安装失败定位为依赖构建问题：pip 拉取到过新的 `pydantic-core` 源码包，构建元数据时要求 Rust/Cargo `edition2024`，而目标机 Cargo 1.82.0 不支持该特性，导致 `metadata-generation-failed`。
+- 已调整 Python 依赖约束并重新导出 `deploy/requirements.txt`：保持官方 MCP SDK `mcp==1.28.1`，锁定 `pydantic==2.11.10`、`pydantic-core==2.33.2`、`pydantic-settings==2.10.1`，并将项目 Python 范围限定为 `>=3.10,<3.14`，避免解析到需要更新 Rust edition 的后续依赖组合。
+- 本轮修复不写入任何 Secret，不改变默认 `READ_ONLY` 模式，不开启生产写执行；仍要求目标机安装 `python3-devel gcc make libffi-devel openssl-devel rust cargo`，首轮 `Python.h` 缺失问题需由系统开发头文件解决。
+- 本地真实回归：`uv run pytest -q` 110 项通过（仅 Starlette TestClient 第三方弃用警告）；`uv run ruff check backend mcp_server scripts` 通过；`uv run mypy backend mcp_server` 通过（88 个源文件）；`uv run python scripts/security_scan.py` 通过（196 个文本/源码文件）；`uv run python scripts/validate_phase0.py` 通过。
+- LoongArch 真机安装结果仍待用户在官方 VM 上使用最新源码重试后确认；不得将当前 Windows 本地回归冒充为 LoongArch 已验证。
+
 ## 2026-07-13 受控执行最终闭环验收（以本节为准）
 
 - 新增 `scripts/target_controlled_execution_smoke.py`，用于目标机真实 API 双人审批受控执行冒烟；脚本只从环境变量读取临时账号密码，使用 HTTP JSON 序列化提交审批 token，不打印、不落盘任何密码或 token。

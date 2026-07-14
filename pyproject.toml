@@ -2,12 +2,13 @@
 name = "kylin-guard-agent"
 version = "0.1.0"
 description = "KylinGuard Agent backend foundation"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 dependencies = [
   "alembic>=1.13,<2",
   "fastapi>=0.115,<1",
-  "mcp>=1.0,<2",
-  "pydantic-settings>=2.6,<3",
+  "mcp>=1.28,<1.29",
+  "pydantic>=2.11,<2.12",
+  "pydantic-settings>=2.10,<2.11",
   "PyYAML>=6,<7",
   "sqlalchemy>=2.0,<3",
   "uvicorn>=0.32,<1",
