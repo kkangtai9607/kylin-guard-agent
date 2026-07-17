@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -6,6 +7,7 @@ from backend.app.agent.orchestrator import AgentOrchestrator
 from backend.app.agent.planning import ActionPlan, Planner
 from backend.app.llm.provider import MockLLMProvider, UnavailableLLMProvider
 from backend.app.mcp_client.client import KylinGuardMCPClient
+from mcp_server.providers import ReadOnlyProvider
 from mcp_server.registry import ToolRegistry
 
 
@@ -88,6 +90,50 @@ def test_common_ops_questions_route_to_dedicated_read_only_tools() -> None:
         plan = planner.plan(goal)
         assert plan.steps[0].tool_name == tool
         assert plan.requires_approval is False
+
+
+def test_cleanup_analysis_is_generated_when_model_intent_is_diagnosis(tmp_path: Path) -> None:
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    target = downloads / "installer.msi"
+    target.write_bytes(b"x" * 10_000_001)
+    goal = "\u5206\u6790\u78c1\u76d8\u7a7a\u95f4\u4e0d\u8db3\u7684\u539f\u56e0\uff0c\u5e76\u5217\u51fa\u5b89\u5168\u6e05\u7406\u5019\u9009"
+    payload = {
+        "plan_id": str(uuid.uuid4()),
+        "user_goal": goal,
+        "intent": "DIAGNOSIS",
+        "complexity": "COMPLEX",
+        "summary": "\u8bca\u65ad\u78c1\u76d8\u7a7a\u95f4\u5e76\u626b\u63cf\u5927\u6587\u4ef6",
+        "steps": [
+            {
+                "sequence": 1,
+                "tool_name": "disk_usage_scan",
+                "arguments": {"path": "/"},
+                "purpose": "\u91c7\u96c6\u78c1\u76d8\u7528\u91cf",
+            },
+            {
+                "sequence": 2,
+                "tool_name": "large_file_scan",
+                "arguments": {"path": "__cleanup_roots__", "min_bytes": 8, "limit": 10},
+                "purpose": "\u626b\u63cf\u5927\u6587\u4ef6",
+            },
+        ],
+        "expected_evidence": ["disk_usage_scan", "large_file_scan"],
+        "risk_level": "L2",
+        "requires_approval": False,
+        "verification": "schema",
+        "rollback": "not applicable",
+        "public_reason": "\u6a21\u578b\u5c06\u5176\u6807\u8bb0\u4e3a\u8bca\u65ad\uff0c\u4f46\u4ecd\u9700\u5c55\u793a\u6e05\u7406\u626b\u63cf\u660e\u7ec6\u3002",
+    }
+    mcp = KylinGuardMCPClient(
+        ToolRegistry(ReadOnlyProvider(allowed_roots=(Path("/"), tmp_path), cleanup_roots=(downloads,)))
+    )
+
+    result = AgentOrchestrator(Planner(MockLLMProvider(payload), mcp), mcp).run(goal)
+
+    assert result["cleanup_analysis"]
+    first = result["cleanup_analysis"][0]
+    assert first["observed_file"]["path"] == str(target)
 
 
 def test_forbidden_input_never_calls_tool() -> None:

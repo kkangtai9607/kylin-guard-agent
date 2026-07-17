@@ -71,16 +71,15 @@ class AgentOrchestrator:
             except (OSError, ValueError):
                 knowledge_hits = []
         cleanup_analysis: list[dict[str, Any]] = []
-        if plan.intent == Intent.CLEANUP and evidence:
-            large_file_record = next(
-                (record for record in evidence if record.tool_name == "large_file_scan"),
-                None,
+        large_file_record = next(
+            (record for record in evidence if record.tool_name == "large_file_scan"),
+            None,
+        )
+        if large_file_record is not None:
+            decisions = CleanupAnalysisService(self.mcp).analyze_large_file_result(
+                large_file_record.payload
             )
-            if large_file_record is not None:
-                decisions = CleanupAnalysisService(self.mcp).analyze_large_file_result(
-                    large_file_record.payload
-                )
-                cleanup_analysis = [item.model_dump(mode="json") for item in decisions]
+            cleanup_analysis = [item.model_dump(mode="json") for item in decisions]
         return {
             "plan": plan.model_dump(mode="json"),
             **composed,

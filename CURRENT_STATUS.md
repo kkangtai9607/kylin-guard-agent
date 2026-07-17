@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-17 清理分析不再依赖模型 intent 标签
+
+- 针对“结论里显示发现了大文件，但清理候选区域一直为空”的持续问题，已定位真正根因：后端原先只有在 `ActionPlan.intent == CLEANUP` 时才生成 `cleanup_analysis`；在线 LLM 有时会把“分析磁盘空间不足并列出清理候选”标记为 `DIAGNOSIS`，但仍按规则调用 `large_file_scan`，导致摘要能看到大文件数量，前端却拿到空的 `cleanup_analysis`。
+- 已将编排逻辑改为“只要实际工具证据中包含 `large_file_scan`，就生成清理分析明细”，不再依赖模型的 intent 标签。模型可以辅助理解，但不能决定是否展示扫描明细。
+- 新增回归测试：模拟模型误标 `DIAGNOSIS` 但计划包含 `large_file_scan` 的情况，验证 `cleanup_analysis` 仍会返回 observed file 明细。
+- 本轮真实回归：`uv run ruff check backend mcp_server` 通过；`uv run mypy backend mcp_server` 通过；`uv run pytest` 132 项通过、1 项 Windows 下 Linux `/proc` 专用测试跳过；`python scripts/security_scan.py` 通过。
+
 ## 2026-07-17 前端会话过期自动处理修复
 
 - 针对“智能运维对话点击开始诊断出现 `invalid or expired session`”的问题，已定位为浏览器保留了过期或重装前的 `kylin-token`：前端路由只检查本地 token 是否存在，没有在后端返回 401 时自动清理并跳转登录页。
