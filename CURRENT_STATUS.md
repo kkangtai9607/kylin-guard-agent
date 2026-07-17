@@ -1,5 +1,13 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-17 清理按钮一键确认执行与用户目录扫描扩展
+
+- 针对“选择并清理点击后像没反应”的反馈，已将单个候选按钮调整为“确认并清理”：点击后会创建清理确认、弹出人工确认理由框，并在确认后直接执行；批量操作仍保持“批量创建清理确认”，避免误删多个文件。
+- 用户 Home 低风险扫描范围扩展：默认纳入 `.cache`、`Downloads`、`Download`、`downloads`、`downlaods`、`Desktop`、`Documents`、`tmp`；仍不扫描整个 `/home/vmuser`，也不纳入 `.ssh`、`.gnupg` 等敏感目录。
+- 清理分类器和 root helper 的低风险目录白名单同步扩展，确保这些目录中的安装包、归档包和临时文件能被列为候选并通过固定 helper 校验。
+- 部署脚本的 systemd `BindReadOnlyPaths` 同步写入上述用户目录；VM 更新后需要重新执行 `sudo bash deploy/install.sh`、`systemctl daemon-reload` 和服务重启才能生效。
+- 本轮真实回归：`npm run type-check` 通过；`npm run build` 通过（仅 Vite chunk 体积提示）；相关后端测试 21 项通过；`ruff check backend mcp_server scripts deploy/kylin_guard_privileged.py` 通过；`mypy backend mcp_server` 通过；`python scripts/security_scan.py` 通过。
+
 ## 2026-07-17 固定白名单清理 helper
 
 - 已实现 root-owned 固定清理 helper：新增 `safe_log_cleanup` 和 `cleanup_rollback` 固定动作，仅接受 broker 传入的冻结候选参数，不提供任意 Shell、任意解释器或任意命令入口。

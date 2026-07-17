@@ -8,7 +8,7 @@ app:
   # 默认开启用户低风险目录扫描：仅扫描登录用户 Home 下列子目录；
   # 不扫描整个 /home，也不会纳入 .ssh、.gnupg、keyrings 等敏感目录。
   user_home_scan_enabled: true
-  user_home_scan_subdirs: [.cache, Downloads, tmp]
+  user_home_scan_subdirs: [.cache, Downloads, Download, downloads, downlaods, Desktop, Documents, tmp]
   # 可显式配置登录用户 Home 或已绑定的低风险子目录；部署脚本会尽量从源码目录推断 /home/<user>。
   user_home_scan_paths: []
   controlled_execution:

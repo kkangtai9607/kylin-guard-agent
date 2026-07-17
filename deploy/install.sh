@@ -48,6 +48,11 @@ configure_user_home_scan() {
   local scan_paths=(
     "$login_home/.cache"
     "$login_home/Downloads"
+    "$login_home/Download"
+    "$login_home/downloads"
+    "$login_home/downlaods"
+    "$login_home/Desktop"
+    "$login_home/Documents"
     "$login_home/tmp"
   )
   local scan_paths_csv
@@ -64,7 +69,12 @@ configure_user_home_scan() {
   install -d -m 0755 -o root -g root /etc/systemd/system/kylin-guard.service.d
   {
     printf '[Service]\n'
-    printf 'BindReadOnlyPaths=-%s/.cache -%s/Downloads -%s/tmp\n' "$login_home" "$login_home" "$login_home"
+    printf 'BindReadOnlyPaths='
+    local scan_path
+    for scan_path in "${scan_paths[@]}"; do
+      printf -- '-%s ' "$scan_path"
+    done
+    printf '\n'
   } > /etc/systemd/system/kylin-guard.service.d/20-user-home-scan.conf
 }
 

@@ -51,6 +51,9 @@ class CleanupPolicy(BaseModel):
         "cache",
         "downloads",
         "download",
+        "downlaods",
+        "desktop",
+        "documents",
         "tmp",
         "temp",
     )

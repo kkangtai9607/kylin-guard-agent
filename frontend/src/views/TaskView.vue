@@ -164,7 +164,7 @@
                 :disabled="!scope.row.eligible"
                 @click="requestCleanup(scope.row.candidate)"
               >
-                选择并清理
+                确认并清理
               </el-button>
             </template>
           </el-table-column>
@@ -388,7 +388,17 @@ async function run() {
 
 async function requestCleanup(candidate: Candidate | null) {
   if (!task.value || !candidate?.candidate_id) return;
-  await requestSelectedCleanup([candidate]);
+  const ok = await requestCleanupApproval(candidate);
+  if (!ok) return;
+  await loadApprovals();
+  const approval = approvals.value.find(
+    (item) => item.status === "PENDING" && item.arguments_summary.candidate_id === candidate.candidate_id,
+  );
+  if (!approval) {
+    ElMessage.warning("清理确认已创建，请在本任务风险确认区域执行");
+    return;
+  }
+  await confirmAndExecute(approval);
 }
 
 async function requestSelectedCleanup(candidates = selectedCleanupDecisions.value.map((item) => item.candidate).filter((item): item is Candidate => Boolean(item?.candidate_id))) {

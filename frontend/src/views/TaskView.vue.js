@@ -55,7 +55,16 @@ async function run() {
 async function requestCleanup(candidate) {
     if (!task.value || !candidate?.candidate_id)
         return;
-    await requestSelectedCleanup([candidate]);
+    const ok = await requestCleanupApproval(candidate);
+    if (!ok)
+        return;
+    await loadApprovals();
+    const approval = approvals.value.find((item) => item.status === "PENDING" && item.arguments_summary.candidate_id === candidate.candidate_id);
+    if (!approval) {
+        ElMessage.warning("清理确认已创建，请在本任务风险确认区域执行");
+        return;
+    }
+    await confirmAndExecute(approval);
 }
 async function requestSelectedCleanup(candidates = selectedCleanupDecisions.value.map((item) => item.candidate).filter((item) => Boolean(item?.candidate_id))) {
     if (!task.value || !candidates.length)

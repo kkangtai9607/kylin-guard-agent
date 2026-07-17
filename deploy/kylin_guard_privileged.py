@@ -71,7 +71,16 @@ _FIXED_ALLOWED_ROOTS = (
     Path("/var/log"),
     Path("/var/log/kylin-guard-managed"),
 )
-_HOME_LOW_RISK_DIRS = {".cache", "Downloads", "tmp"}
+_HOME_LOW_RISK_DIRS = {
+    ".cache",
+    "Downloads",
+    "Download",
+    "downloads",
+    "downlaods",
+    "Desktop",
+    "Documents",
+    "tmp",
+}
 
 
 def main(argv: list[str]) -> int:

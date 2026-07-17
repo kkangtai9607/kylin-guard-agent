@@ -20,18 +20,26 @@ def test_user_home_scan_expands_only_low_risk_existing_subdirs(tmp_path: Path) -
     for path in (
         alice / ".cache",
         alice / "Downloads",
+        alice / "Desktop",
         alice / ".ssh",
         bob / "tmp",
+        bob / "downlaods",
     ):
         path.mkdir(parents=True)
 
     roots = user_home_scan_roots(
         enabled=True,
-        subdirs=(".cache", "Downloads", "tmp", "../escape"),
+        subdirs=(".cache", "Downloads", "Desktop", "downlaods", "tmp", "../escape"),
         home_root=home,
     )
 
-    assert set(roots) == {alice / ".cache", alice / "Downloads", bob / "tmp"}
+    assert set(roots) == {
+        alice / ".cache",
+        alice / "Downloads",
+        alice / "Desktop",
+        bob / "tmp",
+        bob / "downlaods",
+    }
     assert alice / ".ssh" not in roots
 
 

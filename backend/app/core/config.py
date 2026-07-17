@@ -137,7 +137,16 @@ class AppConfig(BaseModel):
     snapshot_scheduler_enabled: bool = False
     snapshot_interval_seconds: int = Field(default=300, ge=30, le=86400)
     user_home_scan_enabled: bool = True
-    user_home_scan_subdirs: tuple[str, ...] = (".cache", "Downloads", "tmp")
+    user_home_scan_subdirs: tuple[str, ...] = (
+        ".cache",
+        "Downloads",
+        "Download",
+        "downloads",
+        "downlaods",
+        "Desktop",
+        "Documents",
+        "tmp",
+    )
     user_home_scan_paths: tuple[Path, ...] = ()
     controlled_execution: ControlledExecutionConfig = ControlledExecutionConfig()
 
