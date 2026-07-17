@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-17 前端会话过期自动处理修复
+
+- 针对“智能运维对话点击开始诊断出现 `invalid or expired session`”的问题，已定位为浏览器保留了过期或重装前的 `kylin-token`：前端路由只检查本地 token 是否存在，没有在后端返回 401 时自动清理并跳转登录页。
+- 已在前端 API 层统一处理 401：非登录请求遇到 `AUTH_REQUIRED/AUTH_INVALID` 时清除 `kylin-token`、`kylin-user`、`kylin-mode`，并跳转 `/login?expired=1`；登录接口本身仍正常显示“登录失败/凭据错误”。
+- `session.logout()` 不再执行 `localStorage.clear()`，改为只删除本项目的三个本地字段，避免误删浏览器中其他应用状态。
+- 本轮真实回归：`npm run type-check` 通过；`npm run build` 通过（仅 Vite chunk 体积提示）；`python scripts/security_scan.py` 通过。
+
 ## 2026-07-15 清理候选 observed_file 兜底修复
 
 - 针对“发现 5 个超过阈值的大文件，但清理候选仍不列出来”的继续反馈，已增加第二层兜底：只要 `large_file_scan.files` 返回了文件记录，即使后续路径策略、stat 或占用检测失败，`cleanup_analysis` 也会返回 `observed_file`，前端可展示路径、大小和排除原因。

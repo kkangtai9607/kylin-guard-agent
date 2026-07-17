@@ -9,6 +9,12 @@ export const useSession = defineStore("session", () => {
     const result = await apiEnvelope<{ access_token: string }>("/auth/login", { method: "POST", body: JSON.stringify({ username: user, password }) });
     localStorage.setItem("kylin-token", result.data.access_token); localStorage.setItem("kylin-user", user); localStorage.setItem("kylin-mode", result.meta.mode); username.value = user; mode.value = result.meta.mode;
   }
-  function logout() { localStorage.clear(); username.value = ""; }
+  function logout() {
+    localStorage.removeItem("kylin-token");
+    localStorage.removeItem("kylin-user");
+    localStorage.removeItem("kylin-mode");
+    username.value = "";
+    mode.value = "READ_ONLY";
+  }
   return { username, mode, login, logout };
 });

@@ -12,6 +12,12 @@ export const useSession = defineStore("session", () => {
         username.value = user;
         mode.value = result.meta.mode;
     }
-    function logout() { localStorage.clear(); username.value = ""; }
+    function logout() {
+        localStorage.removeItem("kylin-token");
+        localStorage.removeItem("kylin-user");
+        localStorage.removeItem("kylin-mode");
+        username.value = "";
+        mode.value = "READ_ONLY";
+    }
     return { username, mode, login, logout };
 });
