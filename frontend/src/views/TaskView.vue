@@ -103,7 +103,37 @@
           :closable="false"
         />
 
-        <el-table v-else :data="result.cleanup_analysis">
+        <div v-if="result.cleanup_analysis.length" class="cleanup-toolbar">
+          <div class="cleanup-toolbar-left">
+            <el-button size="small" @click="selectAllEligibleCleanup">全选可处理项</el-button>
+            <el-button size="small" type="warning" plain @click="selectDisposableCleanup">
+              智能选择缓存/临时文件
+            </el-button>
+            <el-button size="small" @click="clearCleanupSelection">清空选择</el-button>
+          </div>
+          <div class="cleanup-toolbar-right">
+            <span>已选 {{ selectedCandidateIds.length }} 项，预计释放 {{ formatBytes(selectedCleanupBytes) }}</span>
+            <el-button
+              size="small"
+              type="primary"
+              :disabled="session.mode !== 'CONTROLLED_EXECUTION' || !selectedCandidateIds.length"
+              @click="requestSelectedCleanup()"
+            >
+              批量创建清理确认
+            </el-button>
+          </div>
+        </div>
+
+        <el-table v-if="result.cleanup_analysis.length" :data="result.cleanup_analysis">
+          <el-table-column label="选择" width="80">
+            <template #default="scope">
+              <el-checkbox
+                :model-value="isCleanupSelected(scope.row)"
+                :disabled="!canSelectCleanup(scope.row)"
+                @change="(checked: boolean | string | number) => toggleCleanup(scope.row, Boolean(checked))"
+              />
+            </template>
+          </el-table-column>
           <el-table-column label="判定" width="120">
             <template #default="scope">
               <el-tag :type="scope.row.eligible ? 'success' : 'danger'">{{ scope.row.eligible ? "可处理" : "已排除" }}</el-tag>
@@ -139,6 +169,15 @@
             </template>
           </el-table-column>
         </el-table>
+
+        <div v-if="executionSummaries.length" class="cleanup-execution-summary">
+          <h4>本次已清理</h4>
+          <ul>
+            <li v-for="item in executionSummaries" :key="item.approval_id">
+              {{ item.path }}：释放约 {{ formatBytes(item.released_bytes) }}，验证 {{ item.verification }}
+            </li>
+          </ul>
+        </div>
       </section>
 
       <section v-if="approvals.length" class="panel">
@@ -159,9 +198,13 @@
           <el-table-column label="参数">
             <template #default="scope">{{ formatArgs(scope.row.arguments_summary) }}</template>
           </el-table-column>
-          <el-table-column label="执行" width="130">
+          <el-table-column label="执行" width="220">
             <template #default="scope">
-              <el-button size="small" type="success" :disabled="scope.row.status !== 'APPROVED'" @click="executeApproved(scope.row)">执行</el-button>
+              <template v-if="scope.row.status === 'PENDING'">
+                <el-button size="small" type="warning" @click="confirmApproval(scope.row)">确认</el-button>
+                <el-button size="small" type="success" @click="confirmAndExecute(scope.row)">确认并执行</el-button>
+              </template>
+              <el-button v-else size="small" type="success" :disabled="scope.row.status !== 'APPROVED'" @click="executeApproved(scope.row)">执行</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -274,8 +317,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { ElMessage } from "element-plus";
+import { computed, ref } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { api, type Task } from "../api";
 import { useSession } from "../stores/session";
 import { zhStatus } from "../status";
@@ -292,6 +335,7 @@ interface CleanupDecision { eligible: boolean; reason_codes: string[]; candidate
 interface AgentResult { status: string; summary: string; public_reason: string; diagnosis: Diagnosis; plan: Plan; decision_chain: Decision[]; evidence: ToolEvidence[]; normalized_evidence: Evidence[]; root_causes: RootCause[]; cleanup_analysis: CleanupDecision[] }
 interface Approval { id: string; task_id: string; tool_name: string; risk_level: string; status: string; arguments_summary: Record<string, string> }
 interface Claimed { approval_token: string }
+interface CleanupExecutionSummary { approval_id: string; candidate_id: string; path: string; released_bytes: number; verification: string }
 
 const session = useSession();
 const examples = [
@@ -311,12 +355,26 @@ const loading = ref(false);
 const detailVisible = ref(false);
 const detailTitle = ref("");
 const detailJson = ref("");
+const selectedCandidateIds = ref<string[]>([]);
+const executionSummaries = ref<CleanupExecutionSummary[]>([]);
+
+const eligibleCleanupDecisions = computed(() => (result.value?.cleanup_analysis || []).filter(canSelectCleanup));
+const selectedCleanupDecisions = computed(() => {
+  const selected = new Set(selectedCandidateIds.value);
+  return eligibleCleanupDecisions.value.filter((item) => {
+    const candidateId = item.candidate?.candidate_id;
+    return Boolean(candidateId && selected.has(candidateId));
+  });
+});
+const selectedCleanupBytes = computed(() => selectedCleanupDecisions.value.reduce((total, item) => total + (item.candidate?.size_bytes || 0), 0));
 
 async function run() {
   if (!goal.value.trim()) return;
   loading.value = true;
   error.value = "";
   approvals.value = [];
+  selectedCandidateIds.value = [];
+  executionSummaries.value = [];
   try {
     task.value = await api<Task>("/tasks", { method: "POST", body: JSON.stringify({ goal: goal.value.trim() }) });
     result.value = await api<AgentResult>(`/tasks/${task.value.id}/run`, { method: "POST" });
@@ -330,15 +388,135 @@ async function run() {
 
 async function requestCleanup(candidate: Candidate | null) {
   if (!task.value || !candidate?.candidate_id) return;
+  await requestSelectedCleanup([candidate]);
+}
+
+async function requestSelectedCleanup(candidates = selectedCleanupDecisions.value.map((item) => item.candidate).filter((item): item is Candidate => Boolean(item?.candidate_id))) {
+  if (!task.value || !candidates.length) return;
+  let created = 0;
+  const failures: string[] = [];
+  for (const candidate of candidates) {
+    if (!candidate.candidate_id) continue;
+    const ok = await requestCleanupApproval(candidate);
+    if (ok) {
+      created += 1;
+    } else {
+      failures.push(candidate.path);
+    }
+  }
+  if (created) {
+    ElMessage.success(`已创建 ${created} 个清理确认，请确认后执行`);
+    selectedCandidateIds.value = selectedCandidateIds.value.filter((id) => !candidates.some((item) => item.candidate_id === id));
+    await loadApprovals();
+  }
+  if (failures.length) {
+    error.value = `部分候选创建失败：${failures.slice(0, 3).join("；")}${failures.length > 3 ? " 等" : ""}`;
+  }
+}
+
+async function requestCleanupApproval(candidate: Candidate) {
+  if (!task.value || !candidate.candidate_id) return false;
   const argumentsValue = { candidate_id: candidate.candidate_id };
   try {
     await api("/executions/dry-run", { method: "POST", body: JSON.stringify({ tool_name: "safe_log_cleanup", arguments: argumentsValue }) });
     await api(`/tasks/${task.value.id}/approvals`, { method: "POST", body: JSON.stringify({ tool_name: "safe_log_cleanup", arguments: argumentsValue }) });
-    ElMessage.success("风险确认已创建，请在风险确认中心处理");
-    await loadApprovals();
+    return true;
   } catch (e) {
     error.value = e instanceof Error ? e.message : "清理申请失败";
+    return false;
   }
+}
+
+async function confirmApproval(approval: Approval) {
+  try {
+    const reason = await ElMessageBox.prompt(
+      "确认执行此清理操作？请输入公开确认理由。",
+      "清理确认",
+      {
+        confirmButtonText: "确认",
+        cancelButtonText: "返回",
+        inputPattern: /.+/,
+        inputErrorMessage: "必须填写理由",
+        type: "warning",
+      },
+    );
+    await api(`/approvals/${approval.id}/approve`, { method: "POST", body: JSON.stringify({ reason: reason.value }) });
+    ElMessage.success("确认已写入审计链，可以执行清理");
+    await loadApprovals();
+    return true;
+  } catch (e) {
+    if (e !== "cancel" && e !== "close") error.value = e instanceof Error ? e.message : "确认失败";
+    return false;
+  }
+}
+
+async function confirmAndExecute(approval: Approval) {
+  const confirmed = await confirmApproval(approval);
+  if (!confirmed) return;
+  const refreshed = approvals.value.find((item) => item.id === approval.id) || { ...approval, status: "APPROVED" };
+  await executeApproved(refreshed);
+}
+
+function canSelectCleanup(value: CleanupDecision) {
+  return Boolean(value.eligible && value.candidate?.candidate_id);
+}
+
+function isCleanupSelected(value: CleanupDecision) {
+  const candidateId = value.candidate?.candidate_id;
+  return Boolean(candidateId && selectedCandidateIds.value.includes(candidateId));
+}
+
+function toggleCleanup(value: CleanupDecision, checked: boolean) {
+  const candidateId = value.candidate?.candidate_id;
+  if (!candidateId) return;
+  const selected = new Set(selectedCandidateIds.value);
+  if (checked) {
+    selected.add(candidateId);
+  } else {
+    selected.delete(candidateId);
+  }
+  selectedCandidateIds.value = [...selected];
+}
+
+function selectAllEligibleCleanup() {
+  selectedCandidateIds.value = eligibleCleanupDecisions.value
+    .map((item) => item.candidate?.candidate_id)
+    .filter((item): item is string => Boolean(item));
+}
+
+function selectDisposableCleanup() {
+  const disposable = eligibleCleanupDecisions.value.filter(isDisposableCleanup);
+  selectedCandidateIds.value = disposable
+    .map((item) => item.candidate?.candidate_id)
+    .filter((item): item is string => Boolean(item));
+  if (!disposable.length) {
+    ElMessage.info("当前没有可智能选择的缓存、临时文件或下载目录安装包");
+  } else {
+    ElMessage.success(`已选择 ${disposable.length} 个缓存/临时文件候选`);
+  }
+}
+
+function clearCleanupSelection() {
+  selectedCandidateIds.value = [];
+}
+
+function isDisposableCleanup(value: CleanupDecision) {
+  const file = fileForDecision(value);
+  const classification = file?.classification || "";
+  const path = (file?.path || "").toLowerCase();
+  return (
+    canSelectCleanup(value)
+    && (
+      classification === "DISPOSABLE_DOWNLOAD_OR_CACHE_CANDIDATE"
+      || classification === "SAFE_LOG_OR_CACHE_CANDIDATE"
+      || path.includes("/tmp/")
+      || path.includes("/var/tmp/")
+      || path.includes("/.cache/")
+      || path.includes("/downloads/")
+      || path.includes("\\tmp\\")
+      || path.includes("\\downloads\\")
+    )
+  );
 }
 
 async function loadApprovals() {
@@ -354,11 +532,31 @@ async function executeApproved(approval: Approval) {
       method: "POST",
       body: JSON.stringify({ task_id: task.value.id, tool_name: approval.tool_name, arguments: argumentsValue, approval_token: claimed.approval_token }),
     });
-    ElMessage.success(`执行完成：${execution.verification}`);
+    const cleanupCandidate = candidateForApproval(approval);
+    if (approval.tool_name === "safe_log_cleanup" && cleanupCandidate) {
+      executionSummaries.value.unshift({
+        approval_id: approval.id,
+        candidate_id: cleanupCandidate.candidate_id || "",
+        path: cleanupCandidate.path,
+        released_bytes: cleanupCandidate.size_bytes,
+        verification: execution.verification,
+      });
+      ElMessage.success(`已清理 ${cleanupCandidate.path}，释放约 ${formatBytes(cleanupCandidate.size_bytes)}`);
+    } else {
+      ElMessage.success(`执行完成：${execution.verification}`);
+    }
     await loadApprovals();
   } catch (e) {
     error.value = e instanceof Error ? e.message : "执行失败";
   }
+}
+
+function candidateForApproval(approval: Approval) {
+  const candidateId = approval.arguments_summary.candidate_id;
+  if (!candidateId) return null;
+  return (result.value?.cleanup_analysis || [])
+    .map((item) => item.candidate)
+    .find((candidate): candidate is Candidate => candidate?.candidate_id === candidateId) || null;
 }
 
 function openJson(title: string, value: unknown) {
@@ -468,3 +666,47 @@ function sourceText(value: string) {
   } as Record<string, string>)[value] || value;
 }
 </script>
+
+<style scoped>
+.cleanup-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid #d8e4ef;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.cleanup-toolbar-left,
+.cleanup-toolbar-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cleanup-toolbar-right span {
+  color: #3f556b;
+  font-size: 13px;
+}
+
+.cleanup-execution-summary {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f0f9eb;
+  color: #244c22;
+}
+
+.cleanup-execution-summary h4 {
+  margin: 0 0 8px;
+}
+
+.cleanup-execution-summary ul {
+  margin: 0;
+  padding-left: 18px;
+}
+</style>
