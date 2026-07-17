@@ -667,17 +667,12 @@ if (__VLS_ctx.result && __VLS_ctx.task) {
     ElTag;
     // @ts-ignore
     const __VLS_54 = __VLS_asFunctionalComponent(__VLS_53, new __VLS_53({
-        type: (__VLS_ctx.session.mode === 'CONTROLLED_EXECUTION' ? 'warning' : 'info'),
+        type: "warning",
     }));
     const __VLS_55 = __VLS_54({
-        type: (__VLS_ctx.session.mode === 'CONTROLLED_EXECUTION' ? 'warning' : 'info'),
+        type: "warning",
     }, ...__VLS_functionalComponentArgsRest(__VLS_54));
     const { default: __VLS_57 } = __VLS_56.slots;
-    // @ts-ignore
-    [session,];
-    (__VLS_ctx.session.mode === "CONTROLLED_EXECUTION" ? "可发起清理" : "已列出候选，删除需确认");
-    // @ts-ignore
-    [session,];
     var __VLS_56;
     if (!__VLS_ctx.result.cleanup_analysis.length) {
         // @ts-ignore
@@ -795,13 +790,13 @@ if (__VLS_ctx.result && __VLS_ctx.task) {
             ...{ 'onClick': {} },
             size: "small",
             type: "primary",
-            disabled: (__VLS_ctx.session.mode !== 'CONTROLLED_EXECUTION' || !__VLS_ctx.selectedCandidateIds.length),
+            disabled: (!__VLS_ctx.selectedCandidateIds.length),
         }));
         const __VLS_89 = __VLS_88({
             ...{ 'onClick': {} },
             size: "small",
             type: "primary",
-            disabled: (__VLS_ctx.session.mode !== 'CONTROLLED_EXECUTION' || !__VLS_ctx.selectedCandidateIds.length),
+            disabled: (!__VLS_ctx.selectedCandidateIds.length),
         }, ...__VLS_functionalComponentArgsRest(__VLS_88));
         let __VLS_91;
         let __VLS_92;
@@ -813,7 +808,7 @@ if (__VLS_ctx.result && __VLS_ctx.task) {
                         return;
                     __VLS_ctx.requestSelectedCleanup();
                     // @ts-ignore
-                    [session, selectedCandidateIds, requestSelectedCleanup,];
+                    [selectedCandidateIds, requestSelectedCleanup,];
                 } });
         const { default: __VLS_94 } = __VLS_90.slots;
         var __VLS_90;
@@ -1067,13 +1062,13 @@ if (__VLS_ctx.result && __VLS_ctx.task) {
                 ...{ 'onClick': {} },
                 size: "small",
                 type: "primary",
-                disabled: (__VLS_ctx.session.mode !== 'CONTROLLED_EXECUTION' || !scope.row.eligible),
+                disabled: (!scope.row.eligible),
             }));
             const __VLS_171 = __VLS_170({
                 ...{ 'onClick': {} },
                 size: "small",
                 type: "primary",
-                disabled: (__VLS_ctx.session.mode !== 'CONTROLLED_EXECUTION' || !scope.row.eligible),
+                disabled: (!scope.row.eligible),
             }, ...__VLS_functionalComponentArgsRest(__VLS_170));
             let __VLS_173;
             let __VLS_174;
@@ -1085,7 +1080,7 @@ if (__VLS_ctx.result && __VLS_ctx.task) {
                             return;
                         __VLS_ctx.requestCleanup(scope.row.candidate);
                         // @ts-ignore
-                        [session, requestCleanup,];
+                        [requestCleanup,];
                     } });
             const { default: __VLS_176 } = __VLS_172.slots;
             var __VLS_172;

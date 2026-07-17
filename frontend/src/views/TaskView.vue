@@ -89,8 +89,8 @@
             <h3>清理候选</h3>
             <p>缓存、临时文件、下载目录安装包等会先列为候选；删除前仍会校验路径、类型、大小、占用状态和快照哈希。</p>
           </div>
-          <el-tag :type="session.mode === 'CONTROLLED_EXECUTION' ? 'warning' : 'info'">
-            {{ session.mode === "CONTROLLED_EXECUTION" ? "可发起清理" : "已列出候选，删除需确认" }}
+          <el-tag type="warning">
+            可发起清理确认
           </el-tag>
         </div>
 
@@ -116,7 +116,7 @@
             <el-button
               size="small"
               type="primary"
-              :disabled="session.mode !== 'CONTROLLED_EXECUTION' || !selectedCandidateIds.length"
+              :disabled="!selectedCandidateIds.length"
               @click="requestSelectedCleanup()"
             >
               批量创建清理确认
@@ -161,7 +161,7 @@
               <el-button
                 size="small"
                 type="primary"
-                :disabled="session.mode !== 'CONTROLLED_EXECUTION' || !scope.row.eligible"
+                :disabled="!scope.row.eligible"
                 @click="requestCleanup(scope.row.candidate)"
               >
                 选择并清理

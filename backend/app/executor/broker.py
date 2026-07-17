@@ -20,9 +20,12 @@ _MAX_MESSAGE_BYTES = 8192
 _PROTOCOL_VERSION = 1
 _ACTION_RESTART = "service_restart"
 _ACTION_ROLLBACK = "service_rollback"
+_ACTION_CLEANUP = "safe_log_cleanup"
+_ACTION_CLEANUP_ROLLBACK = "cleanup_rollback"
 _ALLOWED_SERVICE = "nginx"
 _HELPER = "/usr/local/lib/kylin-guard/kylin_guard_privileged.py"
 _SUDO = "/usr/bin/sudo"
+_BACKUP_ROOT = "/var/lib/kylin-guard/backups"
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,32 @@ class LocalExecutionBroker:
         self, *, service: str, user_id: str, task_id: str, change_id: str, approval_token: str
     ) -> CommandOutcome:
         return self._execute(_ACTION_ROLLBACK, service, user_id, task_id, approval_token, change_id)
+
+    def cleanup_file(
+        self, *, candidate_id: str, user_id: str, task_id: str, approval_token: str
+    ) -> dict[str, object]:
+        response = self._execute_cleanup(
+            _ACTION_CLEANUP,
+            user_id=user_id,
+            task_id=task_id,
+            approval_token=approval_token,
+            candidate_id=candidate_id,
+            change_id=None,
+        )
+        return _parse_json_stdout(response)
+
+    def rollback_cleanup(
+        self, *, change_id: str, user_id: str, task_id: str, approval_token: str
+    ) -> dict[str, object]:
+        response = self._execute_cleanup(
+            _ACTION_CLEANUP_ROLLBACK,
+            user_id=user_id,
+            task_id=task_id,
+            approval_token=approval_token,
+            candidate_id=None,
+            change_id=change_id,
+        )
+        return _parse_json_stdout(response)
 
     def is_available(self) -> bool:
         try:
@@ -78,6 +107,34 @@ class LocalExecutionBroker:
             request["change_id"] = change_id
         response = self._request(request)
         return CommandOutcome(response.returncode, response.stdout, response.stderr)
+
+    def _execute_cleanup(
+        self,
+        action: str,
+        *,
+        user_id: str,
+        task_id: str,
+        approval_token: str,
+        candidate_id: str | None,
+        change_id: str | None,
+    ) -> BrokerResponse:
+        if action not in {_ACTION_CLEANUP, _ACTION_CLEANUP_ROLLBACK}:
+            raise ValueError("BROKER_ACTION_NOT_ALLOWED")
+        request: dict[str, object] = {
+            "version": _PROTOCOL_VERSION,
+            "action": action,
+            "user_id": user_id,
+            "task_id": task_id,
+            "approval_token": approval_token,
+        }
+        if candidate_id is not None:
+            request["candidate_id"] = candidate_id
+        if change_id is not None:
+            request["change_id"] = change_id
+        response = self._request(request)
+        if response.returncode != 0:
+            raise ValueError(response.stderr or "BROKER_CLEANUP_FAILED")
+        return response
 
     def _request(self, request: dict[str, object]) -> BrokerResponse:
         payload = json.dumps(request, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -206,22 +263,28 @@ def _handle_connection(
         return BrokerResponse(126, "", f"BROKER_DENIED:{type(error).__name__}")
 
 
-def _authorize_and_consume(database_path: Path, request: dict[str, object]) -> tuple[str, str]:
+def _authorize_and_consume(database_path: Path, request: dict[str, object]) -> tuple[str, ...]:
     action = request["action"]
-    service = request["service"]
     user_id = request["user_id"]
     task_id = request["task_id"]
     approval_token = request["approval_token"]
-    if not all(isinstance(value, str) and value for value in (action, service, user_id, task_id, approval_token)):
+    if not all(isinstance(value, str) and value for value in (action, user_id, task_id, approval_token)):
         raise ValueError("BROKER_SCHEMA_INVALID")
-    if service != _ALLOWED_SERVICE:
-        raise ValueError("BROKER_SERVICE_NOT_ALLOWED")
+    expected_tool: str
+    expected_arguments: dict[str, object]
+    helper_args: tuple[str, ...]
     if action == _ACTION_RESTART:
+        service = request.get("service")
+        if service != _ALLOWED_SERVICE:
+            raise ValueError("BROKER_SERVICE_NOT_ALLOWED")
         expected_tool, expected_arguments, helper_args = "service_restart", {"service": service}, (
             _ACTION_RESTART,
             service,
         )
     elif action == _ACTION_ROLLBACK:
+        service = request.get("service")
+        if service != _ALLOWED_SERVICE:
+            raise ValueError("BROKER_SERVICE_NOT_ALLOWED")
         change_id = request.get("change_id")
         if not isinstance(change_id, str) or not change_id:
             raise ValueError("BROKER_SCHEMA_INVALID")
@@ -229,6 +292,20 @@ def _authorize_and_consume(database_path: Path, request: dict[str, object]) -> t
             _ACTION_ROLLBACK,
             service,
         )
+    elif action == _ACTION_CLEANUP:
+        candidate_id = request.get("candidate_id")
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise ValueError("BROKER_SCHEMA_INVALID")
+        expected_tool = "safe_log_cleanup"
+        expected_arguments = {"candidate_id": candidate_id}
+        helper_args = _cleanup_helper_args(database_path, cast(str, task_id), candidate_id)
+    elif action == _ACTION_CLEANUP_ROLLBACK:
+        change_id = request.get("change_id")
+        if not isinstance(change_id, str) or not change_id:
+            raise ValueError("BROKER_SCHEMA_INVALID")
+        expected_tool = "rollback_change"
+        expected_arguments = {"change_id": change_id}
+        helper_args = _cleanup_rollback_helper_args(database_path, cast(str, task_id), change_id)
     else:
         raise ValueError("BROKER_ACTION_NOT_ALLOWED")
     arguments_hash = hashlib.sha256(
@@ -250,6 +327,47 @@ def _authorize_and_consume(database_path: Path, request: dict[str, object]) -> t
         if result.rowcount != 1:
             raise ValueError("BROKER_APPROVAL_REPLAYED")
     return helper_args
+
+
+def _cleanup_helper_args(database_path: Path, task_id: str, candidate_id: str) -> tuple[str, ...]:
+    with sqlite3.connect(database_path, timeout=5) as database:
+        row = database.execute(
+            "SELECT path, size_bytes, inode, device, snapshot_hash FROM cleanup_candidates "
+            "WHERE id = ? AND task_id = ? AND status = 'ELIGIBLE'",
+            (candidate_id, task_id),
+        ).fetchone()
+    if row is None:
+        raise ValueError("BROKER_CLEANUP_CANDIDATE_DENIED")
+    return (
+        _ACTION_CLEANUP,
+        candidate_id,
+        str(row[0]),
+        str(row[1]),
+        str(row[2]),
+        str(row[3]),
+        str(row[4]),
+        _BACKUP_ROOT,
+    )
+
+
+def _cleanup_rollback_helper_args(database_path: Path, task_id: str, change_id: str) -> tuple[str, ...]:
+    with sqlite3.connect(database_path, timeout=5) as database:
+        row = database.execute(
+            "SELECT e.target_ref, b.backup_ref FROM executions e "
+            "JOIN backups b ON b.execution_id = e.id "
+            "WHERE e.id = ? AND e.task_id = ? AND e.status = 'SUCCEEDED' "
+            "AND e.tool_name = 'safe_log_cleanup'",
+            (change_id, task_id),
+        ).fetchone()
+    if row is None:
+        raise ValueError("BROKER_ROLLBACK_DENIED")
+    return (
+        _ACTION_CLEANUP_ROLLBACK,
+        change_id,
+        str(row[1]),
+        str(row[0]),
+        _BACKUP_ROOT,
+    )
 
 
 def _expired(value: object) -> bool:
@@ -285,14 +403,24 @@ def _unix_socket_family() -> socket.AddressFamily:
 
 def _parse_request(raw: bytes) -> dict[str, object]:
     value = json.loads(raw.decode("utf-8"))
-    base_fields = {"version", "action", "service", "user_id", "task_id", "approval_token"}
-    if not isinstance(value, dict) or not base_fields.issubset(value) or set(value) - (base_fields | {"change_id"}):
+    base_fields = {"version", "action", "user_id", "task_id", "approval_token"}
+    allowed_fields = base_fields | {"service", "change_id", "candidate_id"}
+    if not isinstance(value, dict) or not base_fields.issubset(value) or set(value) - allowed_fields:
         raise ValueError("BROKER_SCHEMA_INVALID")
     if value.get("version") != _PROTOCOL_VERSION:
         raise ValueError("BROKER_SCHEMA_INVALID")
-    if value.get("action") == _ACTION_ROLLBACK and "change_id" not in value:
+    action = value.get("action")
+    if action in {_ACTION_RESTART, _ACTION_ROLLBACK} and value.get("service") != _ALLOWED_SERVICE:
         raise ValueError("BROKER_SCHEMA_INVALID")
-    if value.get("action") == _ACTION_RESTART and "change_id" in value:
+    if action == _ACTION_RESTART and (set(value) - (base_fields | {"service"})):
+        raise ValueError("BROKER_SCHEMA_INVALID")
+    if action == _ACTION_ROLLBACK and (set(value) - (base_fields | {"service", "change_id"}) or "change_id" not in value):
+        raise ValueError("BROKER_SCHEMA_INVALID")
+    if action == _ACTION_CLEANUP and (set(value) - (base_fields | {"candidate_id"}) or "candidate_id" not in value):
+        raise ValueError("BROKER_SCHEMA_INVALID")
+    if action == _ACTION_CLEANUP_ROLLBACK and (set(value) - (base_fields | {"change_id"}) or "change_id" not in value):
+        raise ValueError("BROKER_SCHEMA_INVALID")
+    if action not in {_ACTION_RESTART, _ACTION_ROLLBACK, _ACTION_CLEANUP, _ACTION_CLEANUP_ROLLBACK}:
         raise ValueError("BROKER_SCHEMA_INVALID")
     return value
 
@@ -310,6 +438,16 @@ def _parse_response(raw: bytes) -> BrokerResponse:
     if not isinstance(value["stdout"], str) or not isinstance(value["stderr"], str):
         raise ValueError("BROKER_RESPONSE_INVALID")
     return BrokerResponse(value["returncode"], value["stdout"], value["stderr"])
+
+
+def _parse_json_stdout(response: BrokerResponse) -> dict[str, object]:
+    try:
+        parsed = json.loads(response.stdout)
+    except json.JSONDecodeError as error:
+        raise ValueError("BROKER_RESPONSE_INVALID") from error
+    if not isinstance(parsed, dict):
+        raise ValueError("BROKER_RESPONSE_INVALID")
+    return parsed
 
 
 def main() -> None:

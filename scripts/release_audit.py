@@ -22,7 +22,7 @@ def main() -> int:
     if "alembic.ini" not in install:
         errors.append("installer does not copy alembic.ini")
     if "/etc/sudoers.d" in install:
-        errors.append("first READ_ONLY install must not enable sudoers")
+        errors.append("installer must not enable sudoers automatically")
     ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
     for required in (".venv/", "frontend/node_modules/", "frontend/dist/"):
         if required not in ignored:

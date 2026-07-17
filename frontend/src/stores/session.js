@@ -3,7 +3,7 @@ import { ref } from "vue";
 import { apiEnvelope } from "../api";
 export const useSession = defineStore("session", () => {
     const username = ref(localStorage.getItem("kylin-user") || "");
-    const mode = ref(localStorage.getItem("kylin-mode") || "READ_ONLY");
+    const mode = ref(localStorage.getItem("kylin-mode") || "CONTROLLED_EXECUTION");
     async function login(user, password) {
         const result = await apiEnvelope("/auth/login", { method: "POST", body: JSON.stringify({ username: user, password }) });
         localStorage.setItem("kylin-token", result.data.access_token);
@@ -17,7 +17,7 @@ export const useSession = defineStore("session", () => {
         localStorage.removeItem("kylin-user");
         localStorage.removeItem("kylin-mode");
         username.value = "";
-        mode.value = "READ_ONLY";
+        mode.value = "CONTROLLED_EXECUTION";
     }
     return { username, mode, login, logout };
 });

@@ -88,3 +88,52 @@ def test_broker_consumes_only_matching_persisted_approval(tmp_path: Path) -> Non
     assert _authorize_and_consume(database_path, request) == ("service_restart", "nginx")
     with pytest.raises(ValueError, match="BROKER_APPROVAL_DENIED"):
         _authorize_and_consume(database_path, request)
+
+
+def test_broker_authorizes_cleanup_candidate_with_persisted_approval(tmp_path: Path) -> None:
+    database_path = tmp_path / "guard.db"
+    approval_credential = "c" * 64
+    candidate_id = "cleanup-abc123"
+    arguments_hash = sha256(b'{"candidate_id":"cleanup-abc123"}').hexdigest()
+    with sqlite3.connect(database_path) as db:
+        db.execute(
+            "CREATE TABLE approvals (id TEXT, token_hash TEXT, status TEXT, requester_id TEXT, "
+            "task_id TEXT, tool_name TEXT, arguments_hash TEXT, expires_at TEXT)"
+        )
+        db.execute(
+            "CREATE TABLE cleanup_candidates (id TEXT, task_id TEXT, path TEXT, size_bytes INTEGER, "
+            "inode INTEGER, device INTEGER, snapshot_hash TEXT, status TEXT)"
+        )
+        db.execute(
+            "INSERT INTO approvals VALUES (?, ?, 'APPROVED', 'user', 'task', 'safe_log_cleanup', ?, ?) ",
+            (
+                "approval",
+                sha256(approval_credential.encode()).hexdigest(),
+                arguments_hash,
+                "2099-01-01 00:00:00",
+            ),
+        )
+        db.execute(
+            "INSERT INTO cleanup_candidates VALUES (?, 'task', '/tmp/demo.msi', 100, 7, 8, ?, 'ELIGIBLE')",  # noqa: S108
+            (candidate_id, "f" * 64),
+        )
+    request = {
+        "version": 1,
+        "action": "safe_log_cleanup",
+        "candidate_id": candidate_id,
+        "user_id": "user",
+        "task_id": "task",
+        "approval_token": approval_credential,
+    }
+    assert _authorize_and_consume(database_path, request) == (
+        "safe_log_cleanup",
+        candidate_id,
+        "/tmp/demo.msi",  # noqa: S108 - fixed cleanup test path.
+        "100",
+        "7",
+        "8",
+        "f" * 64,
+        "/var/lib/kylin-guard/backups",
+    )
+    with pytest.raises(ValueError, match="BROKER_APPROVAL_DENIED"):
+        _authorize_and_consume(database_path, request)

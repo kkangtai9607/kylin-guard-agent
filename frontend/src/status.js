@@ -1,7 +1,7 @@
 const states = {
-    READ_ONLY: "诊断模式",
+    READ_ONLY: "运维模式",
     DEMO: "演示模式",
-    CONTROLLED_EXECUTION: "运维执行模式",
+    CONTROLLED_EXECUTION: "运维模式",
     ONLINE: "运行正常",
     SUCCEEDED: "已完成",
     FAILED: "失败",

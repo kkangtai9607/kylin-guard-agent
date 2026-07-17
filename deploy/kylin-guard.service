@@ -7,7 +7,7 @@ Type=simple
 User=kylin-guard
 Group=kylin-guard
 WorkingDirectory=/opt/kylin-guard
-Environment=KYLIN_GUARD_MODE=READ_ONLY
+Environment=KYLIN_GUARD_MODE=CONTROLLED_EXECUTION
 Environment=KYLIN_GUARD_DATABASE_URL=sqlite:////opt/kylin-guard/data/kylin_guard.db
 EnvironmentFile=-/etc/kylin-guard/secrets.env
 ExecStartPre=/opt/kylin-guard/.venv/bin/alembic upgrade head
@@ -16,8 +16,8 @@ Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
 # The API must see the host /tmp for read-only disk pressure diagnosis and
-# cleanup-candidate discovery. Write execution is still blocked by READ_ONLY,
-# policy guardrails, approval flow, and fixed controlled executors.
+# cleanup-candidate discovery. Write execution is still blocked by policy
+# guardrails, approval flow, backups, verification, and fixed controlled executors.
 PrivateTmp=false
 ProtectSystem=strict
 ProtectHome=true

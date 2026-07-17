@@ -1,5 +1,28 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-17 固定白名单清理 helper
+
+- 已实现 root-owned 固定清理 helper：新增 `safe_log_cleanup` 和 `cleanup_rollback` 固定动作，仅接受 broker 传入的冻结候选参数，不提供任意 Shell、任意解释器或任意命令入口。
+- 清理 helper 会重新校验 candidate_id、路径白名单、保护路径、符号链接、文件类型、敏感命名、大小、inode、device 和 snapshot_hash；通过后先写入 gzip 备份并校验归档哈希，再删除目标文件并验证目标消失。
+- execution broker 已支持清理与清理回滚：broker 校验 Unix Socket peer UID、持久化审批 token、task/tool/arguments_hash、候选状态和回滚来源后，才通过 sudo 调用固定 helper。
+- 生产清理执行器已支持 broker 优先：broker 可用时可清理 root/vmuser 拥有但位于白名单低风险目录的候选文件；broker 不可用时保留原低权限直接清理路径。
+- systemd/sudoers/deploy 已同步：`kylin-guard-exec` 增加备份目录写入范围，安装脚本创建 `/var/lib/kylin-guard/backups`，sudoers 只允许 root-owned helper 的固定入口并由 helper 二次校验动态参数。
+- 本轮真实回归：全量 `pytest` 133 项通过、1 项 Windows 下 Linux `/proc` 专用测试跳过；`ruff check backend mcp_server scripts deploy/kylin_guard_privileged.py` 通过；`mypy backend mcp_server` 通过；`python scripts/security_scan.py` 通过；`python scripts/release_audit.py` 通过。
+
+## 2026-07-17 默认单一管理员运维模式
+
+- 根据新的产品取舍，项目从“用户手动切换 READ_ONLY/CONTROLLED_EXECUTION”调整为默认单一管理员运维模式：后端默认 `CONTROLLED_EXECUTION`，前端统一显示“运维模式”，清理候选按钮不再因为前端模式状态置灰。
+- 安全边界没有改成任意执行：删除、重启、配置修改、终止进程等写操作仍只能通过固定 Tool、严格参数、确定性策略、候选校验、风险确认、备份、执行后验证和审计链完成；L4 和越权请求仍拒绝。
+- 部署默认值同步更新：`.env.example`、`config/app.example.yaml`、`deploy/kylin-guard.service` 和 `deploy/README.md` 默认使用 `CONTROLLED_EXECUTION`；安装脚本仍不会自动安装 sudoers 或启动特权代理，服务重启等 root 固定动作需要单独验证后启用。
+- 当前清理候选按钮可用于创建确认；若删除 `/tmp` 中由 root/vmuser 创建的文件仍失败，原因将是 Linux 文件权限，需要后续新增固定白名单清理 helper，而不是恢复模式切换。
+- 本轮真实回归：`npm run type-check` 通过；`npm run build` 通过（仅 Vite chunk 体积提示）；针对性后端测试 26 项通过；`python scripts/security_scan.py` 通过。
+
+## 2026-07-17 清理按钮置灰原因提示
+
+- 针对“候选可以勾选，但选择并清理/批量创建清理确认是灰色”的反馈，已确认原因是当前会话处于诊断模式（`READ_ONLY`），前端按安全策略禁止创建删除确认；可勾选只表示该文件已通过候选分类，不代表当前运行模式允许写操作。
+- 已在智能运维对话的清理候选区域新增醒目的提示：诊断模式下可以扫描和勾选候选，但不会执行删除；如需清理，需要目标机配置 `KYLIN_GUARD_MODE=CONTROLLED_EXECUTION` 后重启服务并重新登录。
+- 本轮真实回归：`npm run type-check` 通过；`npm run build` 通过（仅 Vite chunk 体积提示）；`python scripts/security_scan.py` 通过；`git diff --check` 通过。
+
 ## 2026-07-17 清理候选选择与释放量反馈优化
 
 - 针对“清理候选列出来了但不知道怎么选择、没有勾选框”的反馈，已在智能运维对话的清理候选表新增逐项勾选、全选可处理项、清空选择和批量创建清理确认。

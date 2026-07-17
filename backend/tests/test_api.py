@@ -1,10 +1,10 @@
 from fastapi.testclient import TestClient
 
 
-def test_health_is_public_and_read_only(client: TestClient) -> None:
+def test_health_is_public_and_operations_mode(client: TestClient) -> None:
     response = client.get("/api/v1/health")
     assert response.status_code == 200
-    assert response.json()["meta"]["mode"] == "READ_ONLY"
+    assert response.json()["meta"]["mode"] == "CONTROLLED_EXECUTION"
 
 
 def test_login_and_protected_endpoint(client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -28,7 +28,7 @@ def test_task_create_and_transition(client: TestClient, auth_headers: dict[str, 
     created = client.post(
         "/api/v1/tasks",
         headers=auth_headers,
-        json={"goal": "检查系统状态", "requested_mode": "READ_ONLY"},
+        json={"goal": "检查系统状态", "requested_mode": "CONTROLLED_EXECUTION"},
     )
     assert created.status_code == 201
     task_id = created.json()["data"]["id"]

@@ -13,6 +13,7 @@ from backend.app.agent.cleanup import (
     CleanupPolicy,
     FileUseState,
 )
+from backend.app.executor.broker import LocalExecutionBroker
 from backend.app.executor.controlled import ExecutionResult
 from backend.app.guardrails.approval import ApprovalTokenManager
 
@@ -26,11 +27,13 @@ class ControlledCleanupExecutor:
         policy: CleanupPolicy,
         backup_root: Path,
         approvals: ApprovalTokenManager,
+        broker: LocalExecutionBroker | None = None,
     ) -> None:
         self.classifier = CleanupCandidateClassifier(policy)
         self.backup_root = backup_root.resolve()
         self.backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.approvals = approvals
+        self.broker = broker
 
     def dry_run(
         self, candidate: CleanupCandidate, *, use_state: FileUseState
@@ -60,6 +63,21 @@ class ControlledCleanupExecutor:
         simulate_verification_failure: bool = False,
     ) -> ExecutionResult:
         arguments: Mapping[str, object] = {"candidate_id": candidate.candidate_id}
+        if self.broker is not None and self.broker.is_available():
+            self._require_current(candidate, use_state)
+            payload = self.broker.cleanup_file(
+                candidate_id=candidate.candidate_id,
+                user_id=user_id,
+                task_id=task_id,
+                approval_token=approval_token,
+            )
+            return ExecutionResult(
+                change_id=str(payload["change_id"]),
+                tool_name="safe_log_cleanup",
+                status="SUCCEEDED",
+                backup_ref=str(payload["backup_ref"]),
+                verification=str(payload["verification"]),
+            )
         self.approvals.consume(
             approval_token,
             user_id=user_id,
@@ -119,6 +137,21 @@ class ControlledCleanupExecutor:
         target_path: str,
         approval_token: str,
     ) -> ExecutionResult:
+        if self.broker is not None and self.broker.is_available():
+            payload = self.broker.rollback_cleanup(
+                change_id=change_id,
+                user_id=user_id,
+                task_id=task_id,
+                approval_token=approval_token,
+            )
+            return ExecutionResult(
+                change_id=str(payload["change_id"]),
+                tool_name="rollback_change",
+                status="ROLLED_BACK",
+                backup_ref=str(payload["backup_ref"]),
+                verification=str(payload["verification"]),
+                rollback_status="SUCCEEDED",
+            )
         self.approvals.consume(
             approval_token,
             user_id=user_id,

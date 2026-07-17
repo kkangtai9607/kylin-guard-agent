@@ -8,8 +8,8 @@ def test_controlled_capabilities_are_public_metadata_but_authenticated(
     response = client.get("/api/v1/controlled/capabilities", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["mode"] == "READ_ONLY"
-    assert data["enabled"] is False
+    assert data["mode"] == "CONTROLLED_EXECUTION"
+    assert data["enabled"] is True
     assert "service_restart" in data["tools"]
     assert data["production_available_tools"] == []
     assert data["execution_broker"]["available"] is False

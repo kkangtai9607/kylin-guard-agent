@@ -132,7 +132,7 @@ def user_home_scan_roots(
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = "KylinGuard Agent"
-    mode: Literal["DEMO", "READ_ONLY", "CONTROLLED_EXECUTION"] = "READ_ONLY"
+    mode: Literal["DEMO", "READ_ONLY", "CONTROLLED_EXECUTION"] = "CONTROLLED_EXECUTION"
     database: DatabaseConfig = DatabaseConfig()
     snapshot_scheduler_enabled: bool = False
     snapshot_interval_seconds: int = Field(default=300, ge=30, le=86400)

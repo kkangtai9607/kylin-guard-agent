@@ -1,2 +1,4 @@
-# Fixed helper and fixed arguments only; no shell, interpreter wildcard, or arbitrary arguments.
-kylin-guard-exec ALL=(root) NOPASSWD: /usr/local/lib/kylin-guard/kylin_guard_privileged.py service_restart nginx, /usr/local/lib/kylin-guard/kylin_guard_privileged.py service_rollback nginx
+# Fixed helper entrypoints only; no shell, interpreter wildcard, or arbitrary executable.
+# Variable cleanup arguments are revalidated by the root-owned helper against DB-frozen
+# candidate metadata, path allowlists, snapshot hash, backup and rollback rules.
+kylin-guard-exec ALL=(root) NOPASSWD: /usr/local/lib/kylin-guard/kylin_guard_privileged.py service_restart nginx, /usr/local/lib/kylin-guard/kylin_guard_privileged.py service_rollback nginx, /usr/local/lib/kylin-guard/kylin_guard_privileged.py safe_log_cleanup cleanup-* * * * * * /var/lib/kylin-guard/backups, /usr/local/lib/kylin-guard/kylin_guard_privileged.py cleanup_rollback * * * /var/lib/kylin-guard/backups

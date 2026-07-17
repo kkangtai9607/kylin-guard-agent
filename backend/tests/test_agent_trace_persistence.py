@@ -17,7 +17,7 @@ def test_agent_run_persists_structured_public_trace(
     created = client.post(
         "/api/v1/tasks",
         headers=auth_headers,
-        json={"goal": "检查系统状态", "requested_mode": "READ_ONLY"},
+        json={"goal": "检查系统状态", "requested_mode": "CONTROLLED_EXECUTION"},
     )
     assert created.status_code == 201
     task_id = created.json()["data"]["id"]

@@ -1,6 +1,6 @@
 app:
   name: KylinGuard Agent
-  mode: READ_ONLY
+  mode: CONTROLLED_EXECUTION
   host: 127.0.0.1
   port: 8000
   log_level: INFO
@@ -31,7 +31,7 @@ app:
     minimum_size_bytes: 10000000
     allowed_services: [nginx]
     systemctl_path: /usr/bin/systemctl
-    # 仅在安装、校验并显式启用固定动作执行代理后使用；默认 READ_ONLY 不连接该 Socket。
+    # 服务重启等特权固定动作需要安装、校验并启用固定动作执行代理；普通清理候选不依赖通用 Shell。
     executor_socket_path: /run/kylin-guard/executor.sock
     managed_configs:
       - target_id: nginx-main

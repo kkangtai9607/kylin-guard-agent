@@ -69,6 +69,7 @@ configure_user_home_scan() {
 }
 
 install -d -m 0750 -o kylin-guard -g kylin-guard "$APP_ROOT" "$APP_ROOT/data"
+install -d -m 0700 -o root -g root /var/lib/kylin-guard/backups
 cp -a "$SOURCE_ROOT/backend" "$SOURCE_ROOT/mcp_server" "$SOURCE_ROOT/config" "$SOURCE_ROOT/pyproject.toml" "$SOURCE_ROOT/uv.lock" "$SOURCE_ROOT/alembic.ini" "$APP_ROOT/"
 install -d -m 0755 "$APP_ROOT/frontend"
 cp -a "$SOURCE_ROOT/frontend/dist/." "$APP_ROOT/frontend/"
@@ -93,4 +94,4 @@ configure_user_home_scan
 install -d -m 0755 -o root -g root /usr/local/lib/kylin-guard
 install -m 0750 -o root -g root "$SOURCE_ROOT/deploy/kylin_guard_privileged.py" /usr/local/lib/kylin-guard/kylin_guard_privileged.py
 systemctl daemon-reload
-echo "Installed READ_ONLY runtime for $architecture. The fixed-action execution broker is installed but disabled."
+echo "Installed controlled operations runtime for $architecture. Privileged fixed-action broker remains disabled until explicitly enabled."

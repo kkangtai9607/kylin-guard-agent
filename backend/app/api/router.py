@@ -1191,13 +1191,13 @@ def controlled_capabilities(
                 "rollback_change",
             ],
             "production_available_tools": (
-                ["service_restart", "rollback_change"]
+                ["safe_log_cleanup", "service_restart", "rollback_change"]
                 if _execution_broker_available()
                 else []
             ),
             "execution_broker": {
                 "available": _execution_broker_available(),
-                "scope": "fixed nginx restart only",
+                "scope": "fixed cleanup helper and nginx restart only",
             },
             "allowed_services": list(controlled.allowed_services),
             "managed_configs": [
@@ -1358,7 +1358,13 @@ def execution_run(
     target_ref: str | None = None
     rollback_source: ExecutionRecord | None = None
     attempt_id = str(uuid.uuid4())
-    broker_managed = mode == "CONTROLLED_EXECUTION" and body.tool_name == "service_restart"
+    broker_managed = bool(
+        mode == "CONTROLLED_EXECUTION"
+        and (
+            body.tool_name == "service_restart"
+            or (body.tool_name == "safe_log_cleanup" and _execution_broker_available())
+        )
+    )
     if body.tool_name == "rollback_change":
         change_id = body.arguments.get("change_id")
         if isinstance(change_id, str):
@@ -1369,6 +1375,12 @@ def execution_run(
                 and rollback_source.tool_name == "service_restart"
                 and (rollback_source.target_ref or "").startswith("systemd:")
             )
+            if (
+                mode == "CONTROLLED_EXECUTION"
+                and rollback_source is not None
+                and rollback_source.tool_name == "safe_log_cleanup"
+            ):
+                broker_managed = _execution_broker_available()
     if not broker_managed:
         approval.status = "CONSUMED"
     try:
@@ -1668,6 +1680,7 @@ def _production_cleanup_executor() -> ControlledCleanupExecutor:
         policy=policy,
         backup_root=config.backup_root,
         approvals=ApprovalTokenManager(_approval_secret()),
+        broker=LocalExecutionBroker(config.executor_socket_path),
     )
 
 
