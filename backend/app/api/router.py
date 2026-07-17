@@ -612,8 +612,10 @@ def run_task(
         candidate = decision.get("candidate")
         if not isinstance(candidate, dict):
             continue
-        candidate_id = str(candidate["candidate_id"])
-        if db.get(CleanupCandidateRecord, candidate_id) is None:
+        candidate_id = _task_scoped_cleanup_candidate_id(str(candidate["candidate_id"]), task.id)
+        candidate["candidate_id"] = candidate_id
+        record = db.get(CleanupCandidateRecord, candidate_id)
+        if record is None:
             db.add(
                 CleanupCandidateRecord(
                     id=candidate_id,
@@ -626,6 +628,14 @@ def run_task(
                     snapshot_hash=str(candidate["snapshot_hash"]),
                 )
             )
+        else:
+            record.path = str(candidate["path"])
+            record.size_bytes = int(candidate["size_bytes"])
+            record.modified_at = datetime.fromisoformat(str(candidate["modified_at"]))
+            record.inode = int(candidate["inode"])
+            record.device = int(candidate["device"])
+            record.snapshot_hash = str(candidate["snapshot_hash"])
+            record.status = "ELIGIBLE"
     _persist_agent_trace(db, task.id, result)
     task.state = str(result["status"])
     task.version += 1
@@ -638,6 +648,12 @@ def run_task(
     )
     db.commit()
     return envelope(request, result)
+
+
+def _task_scoped_cleanup_candidate_id(candidate_id: str, task_id: str) -> str:
+    if candidate_id.endswith(f"-{task_id[:12]}"):
+        return candidate_id
+    return f"{candidate_id[:48]}-{task_id[:12]}"
 
 
 def _persist_agent_trace(db: Session, task_id: str, result: dict[str, object]) -> None:
@@ -1333,7 +1349,12 @@ def execution_preview(
         else:
             raise AppError(ErrorCode.RBAC_DENIED, "controlled tool is disabled", 403)
     except ValueError as error:
-        raise AppError(ErrorCode.VALIDATION_ERROR, "dry-run rejected", 422) from error
+        raise AppError(
+            ErrorCode.VALIDATION_ERROR,
+            "dry-run rejected",
+            422,
+            {"reason_code": str(error)},
+        ) from error
     return envelope(request, result)
 
 

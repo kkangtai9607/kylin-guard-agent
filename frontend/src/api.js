@@ -24,7 +24,9 @@ function raiseIfFailed(response, payload, path) {
         expireSession(path);
         throw new Error(path === "/auth/login" ? payload.error?.message || "登录失败" : "登录已过期，请重新登录");
     }
-    throw new Error(payload.error?.message || `HTTP ${response.status}`);
+    const reason = payload.error?.details?.reason_code;
+    const message = payload.error?.message || `HTTP ${response.status}`;
+    throw new Error(reason ? `${message}：${reason}` : message);
 }
 export async function apiAs(path, token, options = {}) {
     const response = await fetch(`${API}${path}`, {

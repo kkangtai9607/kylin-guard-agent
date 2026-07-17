@@ -388,8 +388,8 @@ async function run() {
 
 async function requestCleanup(candidate: Candidate | null) {
   if (!task.value || !candidate?.candidate_id) return;
-  const ok = await requestCleanupApproval(candidate);
-  if (!ok) return;
+  const failure = await requestCleanupApproval(candidate);
+  if (failure) return;
   await loadApprovals();
   const approval = approvals.value.find(
     (item) => item.status === "PENDING" && item.arguments_summary.candidate_id === candidate.candidate_id,
@@ -407,11 +407,11 @@ async function requestSelectedCleanup(candidates = selectedCleanupDecisions.valu
   const failures: string[] = [];
   for (const candidate of candidates) {
     if (!candidate.candidate_id) continue;
-    const ok = await requestCleanupApproval(candidate);
-    if (ok) {
+    const failure = await requestCleanupApproval(candidate);
+    if (!failure) {
       created += 1;
     } else {
-      failures.push(candidate.path);
+      failures.push(failure);
     }
   }
   if (created) {
@@ -425,15 +425,16 @@ async function requestSelectedCleanup(candidates = selectedCleanupDecisions.valu
 }
 
 async function requestCleanupApproval(candidate: Candidate) {
-  if (!task.value || !candidate.candidate_id) return false;
+  if (!task.value || !candidate.candidate_id) return "缺少当前任务或候选编号";
   const argumentsValue = { candidate_id: candidate.candidate_id };
   try {
     await api("/executions/dry-run", { method: "POST", body: JSON.stringify({ tool_name: "safe_log_cleanup", arguments: argumentsValue }) });
     await api(`/tasks/${task.value.id}/approvals`, { method: "POST", body: JSON.stringify({ tool_name: "safe_log_cleanup", arguments: argumentsValue }) });
-    return true;
+    return null;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "清理申请失败";
-    return false;
+    const reason = e instanceof Error ? e.message : "清理申请失败";
+    error.value = `${candidate.path}：${reason}`;
+    return `${candidate.path}：${reason}`;
   }
 }
 

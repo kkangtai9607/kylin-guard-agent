@@ -1,5 +1,12 @@
 ﻿# CURRENT_STATUS.md
 
+## 2026-07-17 清理确认失败根因修复与错误透传
+
+- 针对“候选已列出但创建清理确认失败”的反馈，已定位一个关键后端问题：清理候选 `candidate_id` 原先只由文件快照生成，反复扫描同一个文件时会跨任务复用；如果候选记录已属于旧任务，新任务创建确认会因 task_id 校验失败。
+- 已将清理候选持久化 ID 改为任务隔离 ID：`cleanup-...-<task_id前缀>`，并在返回前同步更新前端拿到的 candidate_id；同一个文件在不同任务中可分别创建确认，审批仍绑定当前任务。
+- dry-run 失败现在会返回 `reason_code`，前端 API 层会展示 `dry-run rejected：CANDIDATE_STALE_OR_UNSAFE`、`PATH_REJECTED` 等具体原因；批量清理失败也会展示“路径：原因”，不再只列路径。
+- 本轮真实回归：`npm run type-check` 通过；`npm run build` 通过（仅 Vite chunk 体积提示）；相关后端测试 18 项通过；`ruff check backend mcp_server scripts deploy/kylin_guard_privileged.py` 通过；`mypy backend mcp_server` 通过；`python scripts/security_scan.py` 通过。
+
 ## 2026-07-17 清理按钮一键确认执行与用户目录扫描扩展
 
 - 针对“选择并清理点击后像没反应”的反馈，已将单个候选按钮调整为“确认并清理”：点击后会创建清理确认、弹出人工确认理由框，并在确认后直接执行；批量操作仍保持“批量创建清理确认”，避免误删多个文件。

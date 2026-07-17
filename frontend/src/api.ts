@@ -1,6 +1,7 @@
 const API = "/api/v1";
 
 interface Envelope<T> { data: T; meta: { mode: string; is_demo: boolean }; error: unknown }
+interface ErrorPayload { error?: { message?: string; details?: { reason_code?: string } } }
 
 function expireSession(path: string) {
   if (path === "/auth/login") return;
@@ -20,13 +21,15 @@ async function readPayload(response: Response) {
   }
 }
 
-function raiseIfFailed(response: Response, payload: { error?: { message?: string } }, path: string) {
+function raiseIfFailed(response: Response, payload: ErrorPayload, path: string) {
   if (response.ok) return;
   if (response.status === 401) {
     expireSession(path);
     throw new Error(path === "/auth/login" ? payload.error?.message || "登录失败" : "登录已过期，请重新登录");
   }
-  throw new Error(payload.error?.message || `HTTP ${response.status}`);
+  const reason = payload.error?.details?.reason_code;
+  const message = payload.error?.message || `HTTP ${response.status}`;
+  throw new Error(reason ? `${message}：${reason}` : message);
 }
 
 export async function apiAs<T>(path: string, token: string | null, options: RequestInit = {}): Promise<T> {
